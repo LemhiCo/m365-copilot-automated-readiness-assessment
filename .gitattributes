@@ -1,0 +1,2 @@
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+Media/260305-UK-MSFT-M365[[:space:]]Copilot[[:space:]]Automated[[:space:]]Readiness[[:space:]]Assessment.mp4 filter=lfs diff=lfs merge=lfs -text
