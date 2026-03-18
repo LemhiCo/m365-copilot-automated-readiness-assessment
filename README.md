@@ -89,12 +89,16 @@ Reports are timestamped (e.g., `m365_recommendations_20260106_143106.csv`) to tr
 
 Watch this walkthrough to see how to configure prerequisites, run the assessment, and interpret the generated readiness report.
 
-<video controls width="960" poster="Media/video-tutorial-thumbnail.png">
-  <source src="Media/260305-UK-MSFT-M365%20Copilot%20Automated%20Readiness%20Assessment.mp4" type="video/mp4">
-  Your browser does not support HTML video playback.
-</video>
+<iframe
+  src="https://medius.microsoft.com/Embed/video-nc/3af7da34-28cf-40cb-a70f-635d3b45412d?r=288964079136"
+  width="960"
+  height="540"
+  frameborder="0"
+  allowfullscreen
+  title="Microsoft 365 Copilot Automated Readiness Assessment walkthrough">
+</iframe>
 
-[Fallback: Watch the Automated Readiness Assessment video](Media/260305-UK-MSFT-M365%20Copilot%20Automated%20Readiness%20Assessment.mp4)
+[Fallback: Watch the Automated Readiness Assessment video](https://medius.microsoft.com/Embed/video-nc/3af7da34-28cf-40cb-a70f-635d3b45412d?r=288964079136)
 
 ## Additional Resources
 
