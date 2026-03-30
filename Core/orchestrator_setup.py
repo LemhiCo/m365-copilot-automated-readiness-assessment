@@ -29,6 +29,8 @@ async def load_modules_and_analyze(tenant_id, service_config):
         import Recommendations.power_platform
     if service_config['run_copilot_studio']:
         import Recommendations.copilot_studio
+    if service_config['run_a365']:
+        import Recommendations.a365
     
     # Show feature analysis after modules are loaded
     from .check_all_service_plans import analyze_service_plans

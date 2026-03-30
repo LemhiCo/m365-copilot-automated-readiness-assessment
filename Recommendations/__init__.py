@@ -7,6 +7,7 @@ This package contains feature-specific recommendations organized by service:
 - purview: Compliance and data governance features
 - power_platform: Low-code development and automation features
 - copilot_studio: Conversational AI and agent building features
+- a365: Agent 365 features and package-level assessments
 - m365: Core Microsoft 365 productivity features
 
 Each service folder contains individual Python files for specific features,
@@ -20,5 +21,6 @@ __all__ = [
     'purview',
     'power_platform',
     'copilot_studio',
+    'a365',
     'm365'
 ]

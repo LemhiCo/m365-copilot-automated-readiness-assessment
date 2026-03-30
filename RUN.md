@@ -121,7 +121,7 @@ Edit `params.py` to specify your tenant and services:
 ```python
 TENANT_ID = "contoso.onmicrosoft.com"  # or Azure AD tenant GUID
 
-# Services to analyze - valid values: "M365", "Entra", "Defender", "Purview", "Power Platform", "Copilot Studio"
+# Services to analyze - valid values: "M365", "Entra", "Defender", "Purview", "Power Platform", "Copilot Studio", "A365"
 # Empty array = analyze all services
 SERVICES = []  # e.g., ["M365", "Entra"], ["Defender", "Purview"], or [] for all
 ```
@@ -138,6 +138,9 @@ Override configuration using command-line arguments:
 ```powershell
 # Specific services
 python main.py --services M365 Defender Entra
+
+# A365 switch recognition only (phase 1 scaffolding)
+python main.py --services A365
 
 # Services with spaces require double quotes
 python main.py --services "Power Platform" "Copilot Studio" Purview
@@ -158,6 +161,9 @@ python main.py --tenant-id "contoso.onmicrosoft.com" --services
 - **Security Focus**: `SERVICES = ["Defender", "Entra"]` or `--services Defender Entra`
 - **Compliance Focus**: `SERVICES = ["Purview"]` or `--services Purview`
 - **Power Platform & Copilot**: `SERVICES = ["Power Platform", "Copilot Studio"]` or `--services "Power Platform" "Copilot Studio"`
+- **A365 switch recognition only**: `SERVICES = ["A365"]` or `--services A365`
+
+**A365 Note:** In the current phase, `A365` is a recognized service switch only. Selecting it validates and loads the existing `Recommendations/a365` package scaffolding, but it does not yet perform Agent 365 data collection or generate A365 report output.
 
 ### 4. Run the Assessment
 

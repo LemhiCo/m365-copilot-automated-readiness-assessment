@@ -55,7 +55,7 @@ There are multiple design area evaluations implemented in Automated Readiness As
 
 ### Benefits
 
-**Time**: Assessment completes in seconds. Target specific services (e.g., only Defender + Purview) or run comprehensive analysis across all six areas. No manual form-filling or lengthy questionnaires.
+**Time**: Assessment completes in seconds. Target specific services (e.g., only Defender + Purview) or run comprehensive analysis across all six implemented areas. No manual form-filling or lengthy questionnaires.
 
 **Cost**: Open-source tool with no licensing fees. Leverages existing Microsoft 365 admin permissions - no third-party agents or data exports required.
 
@@ -84,6 +84,10 @@ Reports are timestamped (e.g., `m365_recommendations_20260106_143106.csv`) to tr
 ## Next Steps
 
 [Run Automated Readiness Assessment](RUN.md)
+
+## A365 Switch Status
+
+`A365` is now recognized as a valid service switch in the CLI and configuration flow. This phase only adds switch recognition and recommendation package scaffolding under `Recommendations/a365`; A365 data collection and report generation are not implemented yet.
 
 ## Video Tutorial
 
