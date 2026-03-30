@@ -49,11 +49,19 @@ async def get_a365_client(tenant_id=None, silent=False):
         "  exit 61"
         "};"
         "Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null;"
-        "Write-Host 'A365 sign-in required now. Complete device authentication in the browser within 120 seconds.' -ForegroundColor Yellow;"
-        "Write-Host 'If the browser prompt is hidden, bring it to front and finish sign-in.' -ForegroundColor Yellow;"
-        f"Connect-MgGraph -TenantId '{tenant}' -NoWelcome -ContextScope Process -UseDeviceAuthentication -Scopes 'User.Read','Directory.Read.All','CopilotPackages.Read.All' -ErrorAction Stop;"
+        "$scopes=@('User.Read','Directory.Read.All','CopilotPackages.Read.All');"
+        "Write-Host 'A365 sign-in required now. An account picker/browser prompt should open.' -ForegroundColor Yellow;"
+        "Write-Host 'Select the admin account to use for this run.' -ForegroundColor Yellow;"
         "try {"
-        "  $response = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/copilot/admin/catalog/packages' -ErrorAction Stop;"
+        f"  Connect-MgGraph -TenantId '{tenant}' -NoWelcome -ContextScope Process -Scopes $scopes -ErrorAction Stop;"
+        "}"
+        "catch {"
+        "  Write-Host 'Interactive picker failed or was blocked. Falling back to device code...' -ForegroundColor Yellow;"
+        "  Write-Host 'Use https://microsoft.com/devicelogin if login.microsoft.com/device has browser issues.' -ForegroundColor Yellow;"
+        f"  Connect-MgGraph -TenantId '{tenant}' -NoWelcome -ContextScope Process -UseDeviceAuthentication -Scopes $scopes -ErrorAction Stop;"
+        "}"
+        "try {"
+        "  $response = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$top=10' -ErrorAction Stop;"
         f"  $response | ConvertTo-Json -Depth 30 | Set-Content -Path '{temp_path}' -Encoding UTF8;"
         "  exit 0"
         "}"
@@ -92,6 +100,18 @@ async def get_a365_client(tenant_id=None, silent=False):
 
         with open(temp_json.name, "r", encoding="utf-8") as f:
             payload = json.load(f)
+
+        # Some beta endpoints may ignore $top; enforce a client-side cap for test runs.
+        try:
+            row_limit = int(os.getenv("A365_ROW_LIMIT", "10") or "10")
+        except Exception:
+            row_limit = 10
+        row_limit = max(1, row_limit)
+
+        if isinstance(payload, dict):
+            values = payload.get("value")
+            if isinstance(values, list) and len(values) > row_limit:
+                payload["value"] = values[:row_limit]
 
         os.environ["A365_INTERACTIVE_AUTH"] = "1"
         return payload

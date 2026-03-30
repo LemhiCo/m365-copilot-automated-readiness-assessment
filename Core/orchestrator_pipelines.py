@@ -288,12 +288,42 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             if a365_client is None:
                 return {'available': False, 'recommendations': []}
 
-            with _stdout_lock:
-                sys.stdout.write(f'\r[{get_timestamp()}]   A365 Data Processing    [░░░░░░░░░░░░░░░░░░░░]   0%')
-                sys.stdout.flush()
+            last_percent = -1
+
+            def update_a365_progress(processed, total):
+                nonlocal last_percent
+                if total <= 0:
+                    percent = 100
+                    filled = 20
+                else:
+                    ratio = processed / total
+                    percent = int(ratio * 100)
+                    filled = int(ratio * 20)
+
+                    # Avoid a misleading "0%" display once work has started on large catalogs.
+                    if processed > 0 and percent == 0:
+                        percent = 1
+                    if processed > 0 and filled == 0:
+                        filled = 1
+
+                    if processed >= total:
+                        percent = 100
+                        filled = 20
+
+                # Avoid flooding terminals that don't reliably handle carriage-return updates.
+                if processed not in (0, total) and percent == last_percent:
+                    return
+                last_percent = percent
+
+                bar = '█' * filled + '░' * (20 - filled)
+                counts = f'({processed}/{total})' if total > 0 else '(0/0)'
+                line = f'A365 Data Processing [{bar}] {percent:3d}% {counts}'
+                with _stdout_lock:
+                    sys.stdout.write('\r' + line.ljust(90))
+                    sys.stdout.flush()
 
             from .a365.get_a365_info import get_a365_info
-            result = await get_a365_info(a365_client)
+            result = await get_a365_info(a365_client, progress_callback=update_a365_progress)
 
             with _stdout_lock:
                 sys.stdout.write(f'\r[{get_timestamp()}]   ✓ A365 Data Processing    [████████████████████] 100%\n')
