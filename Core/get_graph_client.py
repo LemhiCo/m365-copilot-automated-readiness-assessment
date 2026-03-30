@@ -1,4 +1,4 @@
-from azure.identity import ClientSecretCredential
+from azure.identity import ClientSecretCredential, InteractiveBrowserCredential
 from msgraph import GraphServiceClient
 import httpx
 import logging
@@ -25,6 +25,7 @@ _load_env()
 # Module-level cache for clients
 _graph_client = None
 _credential = None
+_a365_interactive_credential = None
 
 async def get_graph_client(tenant_id=None, silent=False):
     """Get Microsoft Graph SDK client using service principal authentication
@@ -162,3 +163,68 @@ async def get_api_client(service_name):
         },
         timeout=30.0
     )
+
+
+def ensure_a365_interactive_signin(tenant_id=None, silent=False):
+    """Trigger interactive delegated sign-in for A365 users.
+
+    This performs interactive AuthN and then validates AuthZ by probing
+    the Copilot admin catalog endpoint with a lightweight request.
+
+    Args:
+        tenant_id: Azure tenant ID (optional)
+        silent: If True, suppress status output
+
+    Returns:
+        bool: True only if interactive sign-in succeeds and endpoint authorization is confirmed
+    """
+    global _a365_interactive_credential
+
+    from .spinner import get_timestamp
+
+    if os.environ.get("A365_INTERACTIVE_AUTH") == "1":
+        return True
+
+    try:
+        if not silent:
+            print(f"[{get_timestamp()}] ℹ️  A365 requires interactive sign-in with an AI/Copilot admin user...")
+
+        if _a365_interactive_credential is None:
+            _a365_interactive_credential = InteractiveBrowserCredential(
+                tenant_id=tenant_id or os.getenv('TENANT_ID')
+            )
+
+        # Acquire delegated Graph token after interactive sign-in.
+        token = _a365_interactive_credential.get_token("https://graph.microsoft.com/User.Read")
+
+        # Validate user authorization for Copilot admin endpoint with minimal payload.
+        probe_url = "https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$top=1"
+        response = httpx.get(
+            probe_url,
+            headers={
+                "Authorization": f"Bearer {token.token}",
+                "Accept": "application/json"
+            },
+            timeout=20.0
+        )
+
+        if response.status_code == 200:
+            os.environ["A365_INTERACTIVE_AUTH"] = "1"
+            if not silent:
+                print(f"[{get_timestamp()}] ✅ A365 interactive sign-in and authorization successful")
+            return True
+
+        os.environ["A365_INTERACTIVE_AUTH"] = "0"
+        if not silent:
+            if response.status_code == 403:
+                print(f"[{get_timestamp()}] ⚠️  Signed-in user is not authorized for Copilot admin catalog endpoint (requires AI Admin/Copilot Admin or Global Admin).")
+            elif response.status_code == 401:
+                print(f"[{get_timestamp()}] ⚠️  Interactive sign-in succeeded, but token is unauthorized for Copilot admin endpoint.")
+            else:
+                print(f"[{get_timestamp()}] ⚠️  Authorization probe failed (HTTP {response.status_code}).")
+        return False
+    except Exception as e:
+        os.environ["A365_INTERACTIVE_AUTH"] = "0"
+        if not silent:
+            print(f"[{get_timestamp()}] ⚠️  A365 interactive sign-in failed: {e}")
+        return False

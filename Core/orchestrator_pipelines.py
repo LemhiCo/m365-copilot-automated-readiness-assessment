@@ -267,11 +267,11 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             return {'available': False, 'recommendations': []}
 
     async def a365_pipeline():
-        """A365: Phase-1 pipeline scaffold for the all-services orchestration path."""
+        """A365: auth-only scaffold (interactive sign-in preflight)."""
         if not run_a365:
             return {'available': False, 'recommendations': []}
 
-        return {'available': True, 'recommendations': []}
+        return {'available': os.environ.get("A365_INTERACTIVE_AUTH") == "1", 'recommendations': []}
     
     # Return dict of pipelines
     return {
