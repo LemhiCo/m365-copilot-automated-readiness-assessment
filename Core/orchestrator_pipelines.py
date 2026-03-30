@@ -24,6 +24,7 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
     run_purview = service_config['run_purview']
     run_power_platform = service_config['run_power_platform']
     run_copilot_studio = service_config['run_copilot_studio']
+    run_a365 = service_config['run_a365']
     
     # Define pipeline functions as closures over shared context
     async def m365_pipeline():
@@ -264,6 +265,13 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             import traceback
             traceback.print_exc()
             return {'available': False, 'recommendations': []}
+
+    async def a365_pipeline():
+        """A365: Phase-1 pipeline scaffold for the all-services orchestration path."""
+        if not run_a365:
+            return {'available': False, 'recommendations': []}
+
+        return {'available': True, 'recommendations': []}
     
     # Return dict of pipelines
     return {
@@ -272,5 +280,6 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
         'purview': purview_pipeline,
         'defender': defender_pipeline,
         'power_platform': power_platform_pipeline,
-        'copilot_studio': copilot_studio_pipeline
+        'copilot_studio': copilot_studio_pipeline,
+        'a365': a365_pipeline
     }

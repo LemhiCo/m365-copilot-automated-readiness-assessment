@@ -28,6 +28,7 @@ SKU_FRIENDLY_NAMES = {
     'Power_Virtual_Agents': 'Power Virtual Agents',
     'FLOW_FREE': 'Power Automate Free',
     'CCIBOTS_PRIVPREV_VIRAL': 'Copilot Studio (Viral)',
+    'AGENT_365': 'Agent 365',
     
     # Enterprise Mobility + Security
     'EMS_E5': 'Enterprise Mobility + Security E5',
@@ -118,6 +119,7 @@ SERVICE_PLAN_FRIENDLY_NAMES = {
     'VIRTUAL_AGENT_USL': 'Power Virtual Agents',
     'VIRTUAL_AGENT_BASE_MESSAGES': 'Power Virtual Agents (Base)',
     'CCIBOTS_PRIVPREV_VIRAL': 'Copilot Studio (Viral)',
+    'AGENT_365_TOOLS': 'Agent 365 Tools',
     'COPILOT_STUDIO_IN_COPILOT_FOR_M365': 'Copilot Studio in Microsoft 365 Copilot',
     'M365_COPILOT_INTELLIGENT_SEARCH': 'Microsoft 365 Copilot - Intelligent Search',
     'M365_COPILOT_BUSINESS_CHAT': 'Microsoft 365 Copilot - Business Chat',

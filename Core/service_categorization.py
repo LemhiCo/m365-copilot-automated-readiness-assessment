@@ -48,6 +48,9 @@ SERVICE_PLAN_MAPPING = {
     'DYN365_CDS_O365_P2': 'power_platform', 'DYN365_CDS_O365_P3': 'power_platform', 'DYN365_CDS_VIRAL': 'power_platform',
     'FLOW_CCI_BOTS': 'power_platform', 'FLOW_FREE': 'power_platform', 'FLOW_O365_P3': 'power_platform',
     'FLOW_P2_VIRAL': 'power_platform', 'POWERAPPS_O365_P3': 'power_platform',
+
+    # A365
+    'AGENT_365_TOOLS': 'a365',
     
     # M365
     'BING_CHAT_ENTERPRISE': 'm365', 'BPOS_S_TODO_3': 'm365', 'CLIPCHAMP': 'm365', 'DESKLESS': 'm365',
@@ -166,7 +169,7 @@ def determine_service_type(plan_name):
         
     Returns:
         String indicating service category: 'entra', 'defender', 'purview', 
-        'power_platform', 'copilot_studio', or 'm365' (default)
+        'power_platform', 'copilot_studio', 'a365', or 'm365' (default)
     """
     # Use exact plan name lookup from SERVICE_PLAN_MAPPING
     # Uppercase for case-insensitive matching

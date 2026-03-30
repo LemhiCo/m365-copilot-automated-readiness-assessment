@@ -20,8 +20,9 @@ async def analyze_service_plans(tenant_id, services_to_run):
     
     # Check if we need to analyze Graph-based services (M365, Entra, Defender)
     # Skip for PowerShell-based services (Purview, Power Platform)
-    run_all = "all" in [s.lower() for s in services_to_run]
-    graph_services = ['m365', 'entra', 'defender', 'copilot_studio']
+    normalized_services = [s.lower() for s in services_to_run]
+    run_all = len(services_to_run) == 0 or "all" in normalized_services
+    graph_services = ['m365', 'entra', 'defender', 'copilot_studio', 'a365']
     needs_graph_analysis = run_all or any(s.lower() in graph_services for s in services_to_run)
     
     if not needs_graph_analysis:
@@ -53,7 +54,8 @@ async def analyze_service_plans(tenant_id, services_to_run):
         'Defender': set(),
         'Purview': set(),
         'Power Platform': set(),
-        'Copilot Studio': set()
+        'Copilot Studio': set(),
+        'A365': set()
     }
     
     # Map display names to folder names
@@ -63,7 +65,8 @@ async def analyze_service_plans(tenant_id, services_to_run):
         'Defender': 'defender',
         'Purview': 'purview',
         'Power Platform': 'power_platform',
-        'Copilot Studio': 'copilot_studio'
+        'Copilot Studio': 'copilot_studio',
+        'A365': 'a365'
     }
     
     # Count total plans to process
@@ -82,7 +85,8 @@ async def analyze_service_plans(tenant_id, services_to_run):
                 'defender': 'Defender',
                 'purview': 'Purview',
                 'power_platform': 'Power Platform',
-                'copilot_studio': 'Copilot Studio'
+                'copilot_studio': 'Copilot Studio',
+                'a365': 'A365'
             }
             
             display_name = type_to_display.get(service_type)
@@ -104,7 +108,7 @@ async def analyze_service_plans(tenant_id, services_to_run):
     sys.stdout.flush()
     
     # Check which services will run
-    run_all = "all" in [s.lower() for s in services_to_run]
+    run_all = len(services_to_run) == 0 or "all" in normalized_services
     services_to_evaluate = services_to_run if not run_all else list(tenant_plans.keys())
     
     # Get recommendation file counts (Recommendations folder is in project root, not Core)

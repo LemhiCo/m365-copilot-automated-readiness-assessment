@@ -18,7 +18,7 @@ async def orchestrate(tenant_id, services=None):
     Args:
         tenant_id: Azure tenant ID (GUID or domain name)
         services: List of services to analyze. Valid values: "M365", "Entra", "Defender", 
-                  "Purview", "Power Platform", "Copilot Studio". Empty list or None = all services.
+                  "Purview", "Power Platform", "Copilot Studio", "A365". Empty list or None = all services.
     """
     try:
         # Validate service selection and prepare flags
@@ -34,6 +34,7 @@ async def orchestrate(tenant_id, services=None):
         run_purview = service_config['run_purview']
         run_power_platform = service_config['run_power_platform']
         run_copilot_studio = service_config['run_copilot_studio']
+        run_a365 = service_config['run_a365']
         
         # Load modules and analyze service plans
         await load_modules_and_analyze(tenant_id, service_config)
@@ -44,7 +45,7 @@ async def orchestrate(tenant_id, services=None):
         
         # Check if we need Graph client messages (only for Graph-based services)
         # PowerShell-based services still need client for licenses, but silently
-        graph_services = ['m365', 'entra', 'defender', 'copilot_studio']
+        graph_services = ['m365', 'entra', 'defender', 'copilot_studio', 'a365']
         show_graph_messages = run_all or any(s.lower() in graph_services for s in service_config['services'])
         
         # Initialize Graph client and licenses
@@ -54,13 +55,14 @@ async def orchestrate(tenant_id, services=None):
         pipelines = create_pipelines(client, services_and_licenses, tenant_id, service_config)
         
         # Run independent service pipelines in parallel
-        (m365_result, entra_info, purview_info, defender_info, power_platform_info, copilot_studio_info) = await asyncio.gather(
+        (m365_result, entra_info, purview_info, defender_info, power_platform_info, copilot_studio_info, a365_info) = await asyncio.gather(
             pipelines['m365'](),
             pipelines['entra'](),
             pipelines['purview'](),
             pipelines['defender'](),
             pipelines['power_platform'](),
-            pipelines['copilot_studio']()
+            pipelines['copilot_studio'](),
+            pipelines['a365']()
         )
         
         print(f"[{get_timestamp()}] ✅ All service information gathered")
@@ -69,7 +71,7 @@ async def orchestrate(tenant_id, services=None):
         process_and_print_all_information(
             m365_result, entra_info, 
             purview_info, defender_info, power_platform_info, 
-            copilot_studio_info
+            copilot_studio_info, a365_info
         )
         
     except CredentialUnavailableError as e:

@@ -53,6 +53,9 @@ def get_recommendation(recommendation_type, feature_name, sku_name, status="Succ
     elif recommendation_type.lower() == "copilot_studio":
         from Recommendations.copilot_studio import get_feature_recommendation as get_copilot_studio_recommendation
         recommendation_func = get_copilot_studio_recommendation
+    elif recommendation_type.lower() == "a365":
+        from Recommendations.a365 import get_feature_recommendation as get_a365_recommendation
+        recommendation_func = get_a365_recommendation
     elif recommendation_type.lower() == "m365":
         from Recommendations.m365 import get_feature_recommendation as get_m365_recommendation
         recommendation_func = get_m365_recommendation

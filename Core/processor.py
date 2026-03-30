@@ -6,7 +6,8 @@ from .export_recommendations import export_to_csv, export_to_excel, print_recomm
 
 
 def collect_all_recommendations(m365_recommendations, entra_info, purview_info, 
-                                defender_info, power_platform_info, copilot_studio_info):
+                                defender_info, power_platform_info, copilot_studio_info,
+                                a365_info):
     """Collect all recommendations from different services."""
     all_recommendations = []
     all_recommendations.extend(m365_recommendations)
@@ -15,12 +16,13 @@ def collect_all_recommendations(m365_recommendations, entra_info, purview_info,
     all_recommendations.extend(defender_info.get('recommendations', []))
     all_recommendations.extend(power_platform_info.get('recommendations', []))
     all_recommendations.extend(copilot_studio_info.get('recommendations', []))
+    all_recommendations.extend(a365_info.get('recommendations', []))
     return all_recommendations
 
 
 def process_and_print_all_information(m365_result, entra_info, 
                                       purview_info, defender_info, power_platform_info, 
-                                      copilot_studio_info):
+                                      copilot_studio_info, a365_info):
     """Process all service information and generate recommendations."""
     # Unpack M365 results
     (m365_info, m365_recommendations) = m365_result
@@ -30,7 +32,7 @@ def process_and_print_all_information(m365_result, entra_info,
     # Collect all recommendations
     all_recommendations = collect_all_recommendations(
         m365_recommendations, entra_info, purview_info, 
-        defender_info, power_platform_info, copilot_studio_info
+        defender_info, power_platform_info, copilot_studio_info, a365_info
     )
     
     # Print and export recommendations
