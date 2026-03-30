@@ -9,7 +9,6 @@ from .orchestrator_validation import validate_and_prepare_services
 from .orchestrator_setup import load_modules_and_analyze, setup_graph_and_licenses
 from .orchestrator_powershell import collect_power_platform_data
 from .orchestrator_pipelines import create_pipelines
-from .get_graph_client import ensure_a365_interactive_signin
 
 # Service-specific imports are now lazy-loaded based on SERVICES parameter
 
@@ -44,10 +43,6 @@ async def orchestrate(tenant_id, services=None):
         if run_power_platform or run_copilot_studio:
             await collect_power_platform_data(tenant_id, run_power_platform, run_copilot_studio)
 
-        # PRE-FLIGHT: A365 interactive sign-in only (no A365 endpoint calls yet)
-        if run_a365:
-            ensure_a365_interactive_signin(tenant_id)
-        
         # A365-only runs do not require service-principal Graph context.
         # Mixed runs (e.g., M365 + A365) keep existing SP behavior.
         requires_sp_context = run_all or run_m365 or run_entra or run_defender or run_purview or run_power_platform or run_copilot_studio

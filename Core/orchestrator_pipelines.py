@@ -267,11 +267,41 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             return {'available': False, 'recommendations': []}
 
     async def a365_pipeline():
-        """A365: auth-only scaffold (interactive sign-in preflight)."""
+        """A365: Gather catalog packages, then process."""
         if not run_a365:
             return {'available': False, 'recommendations': []}
 
-        return {'available': os.environ.get("A365_INTERACTIVE_AUTH") == "1", 'recommendations': []}
+        try:
+            import sys
+
+            with _stdout_lock:
+                sys.stdout.write(f'\r[{get_timestamp()}]   A365 Data Gathering     [░░░░░░░░░░░░░░░░░░░░]   0%')
+                sys.stdout.flush()
+
+            from .a365.get_a365_client import get_a365_client
+            a365_client = await get_a365_client(tenant_id)
+
+            with _stdout_lock:
+                sys.stdout.write(f'\r[{get_timestamp()}]   ✓ A365 Data Gathering     [████████████████████] 100%\n')
+                sys.stdout.flush()
+
+            if a365_client is None:
+                return {'available': False, 'recommendations': []}
+
+            with _stdout_lock:
+                sys.stdout.write(f'\r[{get_timestamp()}]   A365 Data Processing    [░░░░░░░░░░░░░░░░░░░░]   0%')
+                sys.stdout.flush()
+
+            from .a365.get_a365_info import get_a365_info
+            result = await get_a365_info(a365_client)
+
+            with _stdout_lock:
+                sys.stdout.write(f'\r[{get_timestamp()}]   ✓ A365 Data Processing    [████████████████████] 100%\n')
+                sys.stdout.flush()
+
+            return result
+        except Exception:
+            return {'available': False, 'recommendations': []}
     
     # Return dict of pipelines
     return {
