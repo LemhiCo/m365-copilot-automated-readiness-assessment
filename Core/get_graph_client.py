@@ -1,8 +1,9 @@
-from azure.identity import ClientSecretCredential, InteractiveBrowserCredential
+from azure.identity import ClientSecretCredential
 from msgraph import GraphServiceClient
 import httpx
 import logging
 import os
+import subprocess
 
 # Suppress Azure SDK warnings
 logging.getLogger('azure.identity').setLevel(logging.ERROR)
@@ -25,7 +26,6 @@ _load_env()
 # Module-level cache for clients
 _graph_client = None
 _credential = None
-_a365_interactive_credential = None
 
 async def get_graph_client(tenant_id=None, silent=False):
     """Get Microsoft Graph SDK client using service principal authentication
@@ -168,8 +168,8 @@ async def get_api_client(service_name):
 def ensure_a365_interactive_signin(tenant_id=None, silent=False):
     """Trigger interactive delegated sign-in for A365 users.
 
-    This performs interactive AuthN and then validates AuthZ by probing
-    the Copilot admin catalog endpoint with a lightweight request.
+    This performs interactive AuthN via Connect-MgGraph (browser popup style)
+    and validates AuthZ by probing the Copilot admin catalog endpoint.
 
     Args:
         tenant_id: Azure tenant ID (optional)
@@ -178,37 +178,55 @@ def ensure_a365_interactive_signin(tenant_id=None, silent=False):
     Returns:
         bool: True only if interactive sign-in succeeds and endpoint authorization is confirmed
     """
-    global _a365_interactive_credential
-
     from .spinner import get_timestamp
-
-    if os.environ.get("A365_INTERACTIVE_AUTH") == "1":
-        return True
 
     try:
         if not silent:
             print(f"[{get_timestamp()}] ℹ️  A365 requires interactive sign-in with an AI/Copilot admin user...")
 
-        if _a365_interactive_credential is None:
-            _a365_interactive_credential = InteractiveBrowserCredential(
-                tenant_id=tenant_id or os.getenv('TENANT_ID')
-            )
+        # Always re-run interactive auth for A365 to avoid silent reuse of prior in-process status.
+        os.environ["A365_INTERACTIVE_AUTH"] = "0"
 
-        # Acquire delegated Graph token after interactive sign-in.
-        token = _a365_interactive_credential.get_token("https://graph.microsoft.com/User.Read")
+        tenant = tenant_id or os.getenv('TENANT_ID')
+        if not tenant:
+            os.environ["A365_INTERACTIVE_AUTH"] = "0"
+            if not silent:
+                print(f"[{get_timestamp()}] ⚠️  TENANT_ID is required for A365 interactive sign-in")
+            return False
 
-        # Validate user authorization for Copilot admin endpoint with minimal payload.
-        probe_url = "https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$top=1"
-        response = httpx.get(
-            probe_url,
-            headers={
-                "Authorization": f"Bearer {token.token}",
-                "Accept": "application/json"
-            },
-            timeout=20.0
+        # Use PowerShell Graph interactive auth (popup experience, similar to Purview flow).
+        ps_command = (
+            "$ErrorActionPreference='Stop';"
+            "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {"
+            "  Write-Host 'Microsoft.Graph PowerShell module is required for A365 interactive sign-in.' -ForegroundColor Yellow;"
+            "  Write-Host 'Install with: Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber' -ForegroundColor Cyan;"
+            "  exit 61"
+            "};"
+            "Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null;"
+            "Write-Host 'A365 sign-in required now. Complete device authentication in the browser within 120 seconds.' -ForegroundColor Yellow;"
+            "Write-Host 'If the browser prompt is hidden, bring it to front and finish sign-in.' -ForegroundColor Yellow;"
+            f"Connect-MgGraph -TenantId '{tenant}' -NoWelcome -ContextScope Process -UseDeviceAuthentication -Scopes 'User.Read','Directory.Read.All','CopilotPackages.Read.All' -ErrorAction Stop;"
+            "try {"
+            "  Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$top=1' -ErrorAction Stop | Out-Null;"
+            "  exit 0"
+            "}"
+            "catch {"
+            "  if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {"
+            "    $code=[int]$_.Exception.Response.StatusCode;"
+            "    if ($code -eq 401) { exit 41 }"
+            "    elseif ($code -eq 403) { exit 43 }"
+            "    else { exit 50 }"
+            "  }"
+            "  else { exit 51 }"
+            "}"
         )
 
-        if response.status_code == 200:
+        result = subprocess.run(
+            ["pwsh", "-NoProfile", "-Command", ps_command],
+            text=True
+        )
+
+        if result.returncode == 0:
             os.environ["A365_INTERACTIVE_AUTH"] = "1"
             if not silent:
                 print(f"[{get_timestamp()}] ✅ A365 interactive sign-in and authorization successful")
@@ -216,12 +234,14 @@ def ensure_a365_interactive_signin(tenant_id=None, silent=False):
 
         os.environ["A365_INTERACTIVE_AUTH"] = "0"
         if not silent:
-            if response.status_code == 403:
+            if result.returncode == 43:
                 print(f"[{get_timestamp()}] ⚠️  Signed-in user is not authorized for Copilot admin catalog endpoint (requires AI Admin/Copilot Admin or Global Admin).")
-            elif response.status_code == 401:
+            elif result.returncode == 41:
                 print(f"[{get_timestamp()}] ⚠️  Interactive sign-in succeeded, but token is unauthorized for Copilot admin endpoint.")
+            elif result.returncode == 61:
+                print(f"[{get_timestamp()}] ⚠️  Microsoft.Graph PowerShell module not found. Install it and retry.")
             else:
-                print(f"[{get_timestamp()}] ⚠️  Authorization probe failed (HTTP {response.status_code}).")
+                print(f"[{get_timestamp()}] ⚠️  A365 interactive sign-in/auth probe failed via Graph PowerShell.")
         return False
     except Exception as e:
         os.environ["A365_INTERACTIVE_AUTH"] = "0"

@@ -48,13 +48,21 @@ async def orchestrate(tenant_id, services=None):
         if run_a365:
             ensure_a365_interactive_signin(tenant_id)
         
-        # Check if we need Graph client messages (only for Graph-based services)
-        # PowerShell-based services still need client for licenses, but silently
-        graph_services = ['m365', 'entra', 'defender', 'copilot_studio', 'a365']
-        show_graph_messages = run_all or any(s.lower() in graph_services for s in service_config['services'])
-        
-        # Initialize Graph client and licenses
-        client, services_and_licenses, has_license_data = await setup_graph_and_licenses(tenant_id, show_graph_messages)
+        # A365-only runs do not require service-principal Graph context.
+        # Mixed runs (e.g., M365 + A365) keep existing SP behavior.
+        requires_sp_context = run_all or run_m365 or run_entra or run_defender or run_purview or run_power_platform or run_copilot_studio
+
+        if requires_sp_context:
+            # Check if we need Graph client messages (only for Graph-based services)
+            # PowerShell-based services still need client for licenses, but silently
+            graph_services = ['m365', 'entra', 'defender', 'copilot_studio']
+            show_graph_messages = run_all or any(s.lower() in graph_services for s in service_config['services'])
+
+            # Initialize Graph client and licenses
+            client, services_and_licenses, has_license_data = await setup_graph_and_licenses(tenant_id, show_graph_messages)
+        else:
+            client = None
+            services_and_licenses = None
         
         # Create service pipelines with shared context
         pipelines = create_pipelines(client, services_and_licenses, tenant_id, service_config)

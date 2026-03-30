@@ -22,7 +22,8 @@ async def analyze_service_plans(tenant_id, services_to_run):
     # Skip for PowerShell-based services (Purview, Power Platform)
     normalized_services = [s.lower() for s in services_to_run]
     run_all = len(services_to_run) == 0 or "all" in normalized_services
-    graph_services = ['m365', 'entra', 'defender', 'copilot_studio', 'a365']
+    # A365 currently uses interactive AuthN/AuthZ and does not rely on subscribed SKUs.
+    graph_services = ['m365', 'entra', 'defender', 'copilot_studio']
     needs_graph_analysis = run_all or any(s.lower() in graph_services for s in services_to_run)
     
     if not needs_graph_analysis:
