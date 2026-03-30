@@ -160,7 +160,8 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
                 sys.stdout.flush()
             
             from .get_defender_info import get_defender_info
-            purview_client_for_defender = None
+            from .get_purview_client import get_purview_client
+            purview_client_for_defender = await get_purview_client(client)  # uses cached stdin data if available
             result = await get_defender_info(client, defender_client, services_and_licenses, purview_client_for_defender)
             
             with _stdout_lock:
