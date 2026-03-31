@@ -38,8 +38,11 @@ async def get_a365_client(tenant_id=None, silent=False):
 
     temp_json = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
     temp_json.close()
+    token_temp = tempfile.NamedTemporaryFile(delete=False, suffix=".token.txt")
+    token_temp.close()
 
     temp_path = temp_json.name.replace("'", "''")
+    token_path = token_temp.name.replace("'", "''")
 
     ps_command = (
         "$ErrorActionPreference='Stop';"
@@ -61,8 +64,17 @@ async def get_a365_client(tenant_id=None, silent=False):
         f"  Connect-MgGraph -TenantId '{tenant}' -NoWelcome -ContextScope Process -UseDeviceAuthentication -Scopes $scopes -ErrorAction Stop;"
         "}"
         "try {"
-        "  $response = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$top=10' -ErrorAction Stop;"
+        "  $response = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/copilot/admin/catalog/packages' -ErrorAction Stop;"
         f"  $response | ConvertTo-Json -Depth 30 | Set-Content -Path '{temp_path}' -Encoding UTF8;"
+        "  $_tok = $null;"
+        "  try { $_tok = (Get-MgContext).AccessToken; } catch {}"
+        "  if (-not $_tok) {"
+        "    try {"
+        "      $_r2 = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/me' -OutputType HttpResponseMessage -ErrorAction Stop;"
+        "      $_tok = $_r2.RequestMessage.Headers.Authorization.Parameter;"
+        "    } catch {}"
+        "  }"
+        f"  if ($_tok) {{ $_tok | Set-Content -Path '{token_path}' -NoNewline -Encoding UTF8; }}"
         "  exit 0"
         "}"
         "catch {"
@@ -101,17 +113,11 @@ async def get_a365_client(tenant_id=None, silent=False):
         with open(temp_json.name, "r", encoding="utf-8") as f:
             payload = json.load(f)
 
-        # Some beta endpoints may ignore $top; enforce a client-side cap for test runs.
-        try:
-            row_limit = int(os.getenv("A365_ROW_LIMIT", "10") or "10")
-        except Exception:
-            row_limit = 10
-        row_limit = max(1, row_limit)
-
-        if isinstance(payload, dict):
-            values = payload.get("value")
-            if isinstance(values, list) and len(values) > row_limit:
-                payload["value"] = values[:row_limit]
+        if os.path.exists(token_temp.name):
+            with open(token_temp.name, "r", encoding="utf-8") as f:
+                access_token = f.read().strip()
+            if access_token:
+                payload["_access_token"] = access_token
 
         os.environ["A365_INTERACTIVE_AUTH"] = "1"
         return payload
@@ -124,5 +130,10 @@ async def get_a365_client(tenant_id=None, silent=False):
         try:
             if os.path.exists(temp_json.name):
                 os.remove(temp_json.name)
+        except OSError:
+            pass
+        try:
+            if os.path.exists(token_temp.name):
+                os.remove(token_temp.name)
         except OSError:
             pass

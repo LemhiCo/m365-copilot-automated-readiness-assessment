@@ -1,7 +1,5 @@
 """Generic A365 catalog package recommendation builder."""
 
-import importlib
-
 from Core.new_recommendation import new_recommendation
 
 
@@ -190,44 +188,6 @@ def _extract_risk_signal(package_row, status_text):
     return "No explicit risk indicators in returned fields"
 
 
-def _is_low_quality_ai_summary(summary_text, package_name):
-    """Reject generic or evasive AI output and fallback to deterministic text."""
-    text = _normalize_text(summary_text)
-    if not text:
-        return True
-
-    lowered = text.lower()
-    bad_markers = [
-        "not provided",
-        "please provide",
-        "no package data",
-        "cannot be summarized",
-        "for a more accurate summary",
-        "for a complete summary",
-        "for this entry",
-        "necessary details",
-    ]
-    if any(marker in lowered for marker in bad_markers):
-        return True
-
-    # Reject placeholder-heavy outputs that don't provide useful narrative value.
-    unknown_markers = (
-        "purpose/capability: unknown",
-        "lifecycle/platform: unknown",
-        "status/risk signal: unknown",
-    )
-    if any(marker in lowered for marker in unknown_markers):
-        return True
-    if lowered.count("unknown") >= 3:
-        return True
-
-    # Require mention of package identity in accepted AI output.
-    short_name = _normalize_text(package_name)
-    if short_name and short_name.lower() not in lowered:
-        return True
-
-    return False
-
 
 def get_recommendation(sku_name, status="Success", client=None):
     """Create one observation recommendation from a single A365 package row."""
@@ -249,33 +209,17 @@ def get_recommendation(sku_name, status="Success", client=None):
     else:
         tags_text = _trim(tags, max_len=120) or "None"
 
-    precomputed_summary = _normalize_text(package.get("_precomputed_summary"))
-    if precomputed_summary and not _is_low_quality_ai_summary(precomputed_summary, package_name):
-        ai_summary = precomputed_summary
-    else:
-        ai_summary = None
-
-    if ai_summary is None and not bool(package.get("_skip_row_summarization")):
-        try:
-            summarize_module = importlib.import_module("Core.a365.copilot_summarizer")
-            summarize_package_row = getattr(summarize_module, "summarize_package_row")
-            ai_summary = summarize_package_row(package)
-        except Exception:
-            ai_summary = None
-    if ai_summary and not _is_low_quality_ai_summary(ai_summary, package_name):
-        observation = ai_summary
-    else:
-        observation = _build_human_fallback_observation(
-            package_name,
-            package_type,
-            package_id,
-            package_status,
-            tags_text,
-            purpose_signal,
-            created_signal,
-            platform_signal,
-            risk_signal,
-        )
+    observation = _build_human_fallback_observation(
+        package_name,
+        package_type,
+        package_id,
+        package_status,
+        tags_text,
+        purpose_signal,
+        created_signal,
+        platform_signal,
+        risk_signal,
+    )
 
     return new_recommendation(
         service="A365",

@@ -522,3 +522,278 @@ def summarize_package_row(package_row):
             with _stdout_lock:
                 print(f"\n[{get_timestamp()}] [WARN] A365 Copilot summarization call failed; using fallback summaries.")
         return None
+
+
+# Fields extracted from each package row for the executive summarization call.
+_EXECUTIVE_SUMMARY_FIELDS = (
+    "displayName",
+    "type",
+    "shortDescription",
+    "isBlocked",
+    "supportedHosts",
+    "lastModifiedDateTime",
+    "publisher",
+    "availableTo",
+    "deployedTo",
+    "elementTypes",
+    "platform",
+)
+
+
+def _aggregate_catalog(packages):
+    """Condense a full package list into statistics for the executive summary prompt."""
+    from collections import Counter
+
+    rows = [pkg for pkg in (packages if isinstance(packages, list) else []) if isinstance(pkg, dict)]
+
+    types = Counter(str(r.get("type") or "Unknown") for r in rows)
+    avail = Counter(str(r.get("availableTo") or "Unknown") for r in rows)
+    deployed = Counter(str(r.get("deployedTo") or "Unknown") for r in rows)
+    platforms = Counter(str(r.get("platform") or "Not specified") for r in rows)
+    publishers = Counter(str(r.get("publisher") or "Unknown") for r in rows)
+    blocked = sum(1 for r in rows if r.get("isBlocked") is True)
+    names = [str(r.get("displayName") or r.get("name") or "Unknown") for r in rows]
+
+    return {
+        "totalPackages": len(rows),
+        "byType": dict(types.most_common()),
+        "byAvailableTo": dict(avail.most_common()),
+        "byDeployedTo": dict(deployed.most_common()),
+        "byPlatform": dict(platforms.most_common()),
+        "topPublishers": dict(publishers.most_common(15)),
+        "blockedCount": blocked,
+        "packageNames": names,
+    }
+
+
+def _build_statistical_fallback(agg):
+    """Build a plain-text executive summary from aggregated stats when AI is unavailable."""
+    total = agg["totalPackages"]
+    avail_parts = ", ".join(f"{v} {k}" for k, v in agg["byAvailableTo"].items())
+    deploy_parts = ", ".join(f"{v} {k}" for k, v in agg["byDeployedTo"].items())
+    platform_parts = ", ".join(f"{k} ({v})" for k, v in list(agg["byPlatform"].items())[:5])
+    blocked = agg["blockedCount"]
+    blocked_note = f"{blocked} package(s) are marked as blocked." if blocked else "No packages are currently blocked."
+
+    return (
+        f"The Copilot catalog contains {total} packages. "
+        f"Availability distribution: {avail_parts}. "
+        f"Deployment distribution: {deploy_parts}. "
+        f"Platform representation: {platform_parts}. "
+        f"{blocked_note} "
+        f"Review deployment gaps and blocked entries to assess tenant readiness."
+    )
+
+
+def summarize_catalog_executive(packages):
+    """Make a single AI call with aggregated catalog statistics; returns (ai_text_or_None, fallback_text).
+
+    Pre-aggregates the package list to avoid token-limit issues with large catalogs.
+    Always returns a non-empty fallback_text derived from statistics so callers
+    always have something to put in the report even when the API is unavailable.
+    """
+    agg = _aggregate_catalog(packages)
+    fallback_text = _build_statistical_fallback(agg)
+
+    token, _ = _get_token_cached()
+    if not token:
+        return None, fallback_text
+
+    auth_headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    request_body = {
+        "model": DEFAULT_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a Microsoft 365 readiness analyst. "
+                    "Given aggregated statistics about Copilot catalog packages, "
+                    "produce a concise executive summary for an IT admin audience covering: "
+                    "the breadth and nature of packages in the catalog, "
+                    "the distribution of availability and deployment status (availableTo / deployedTo), "
+                    "any blocked or restricted entries, "
+                    "notable publishers or platforms represented, "
+                    "and overall readiness signals or risks. "
+                    "Return plain text only. No markdown, no bullet points, no headers."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Summarize this Copilot catalog for an executive readiness report using the aggregated statistics below:\n"
+                    + json.dumps(agg, ensure_ascii=True)
+                ),
+            },
+        ],
+        "temperature": 0.3,
+    }
+
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            for attempt in range(MAX_RETRIES):
+                response = client.post(DEFAULT_API_URL, json=request_body, headers=auth_headers)
+
+                if response.status_code < 400:
+                    text = _extract_text(response.json())
+                    return (text or None), fallback_text
+
+                if response.status_code == 429 or 500 <= response.status_code <= 599:
+                    if attempt < MAX_RETRIES - 1:
+                        retry_after = _parse_retry_after(response.headers)
+                        wait = retry_after if retry_after is not None else (1.5 * (attempt + 1)) + random.uniform(0.0, 0.8)
+                        time.sleep(max(0.5, min(wait, 15.0)))
+                        continue
+                break
+    except Exception:
+        pass
+
+    return None, fallback_text
+
+
+# ---------------------------------------------------------------------------
+# Package detail aggregation helpers
+# ---------------------------------------------------------------------------
+
+def _aggregate_details(details):
+    """Condense per-package detail list into aggregated statistics."""
+    from collections import Counter
+
+    rows = [d for d in (details if isinstance(details, list) else []) if isinstance(d, dict)]
+
+    category_cnt = Counter()
+    host_cnt = Counter()
+    element_type_cnt = Counter()
+
+    for r in rows:
+        for c in (r.get("categories") or []):
+            category_cnt[str(c)] += 1
+        for h in (r.get("supportedHosts") or []):
+            host_cnt[str(h)] += 1
+        for e in (r.get("elementTypes") or []):
+            element_type_cnt[str(e)] += 1
+
+    return {
+        "sampledCount": len(rows),
+        "byCategory": dict(category_cnt.most_common()),
+        "bySupportedHost": dict(host_cnt.most_common()),
+        "byElementType": dict(element_type_cnt.most_common()),
+        "byVersion": dict(Counter(str(r.get("version") or "Unknown") for r in rows).most_common(10)),
+        "byPlatform": dict(Counter(str(r.get("platform") or "Not specified") for r in rows).most_common()),
+        "byAvailableTo": dict(Counter(str(r.get("availableTo") or "Unknown") for r in rows).most_common()),
+        "byDeployedTo": dict(Counter(str(r.get("deployedTo") or "Unknown") for r in rows).most_common()),
+        "packagesWithRestrictedAccess": sum(
+            1 for r in rows
+            if isinstance(r.get("allowedUsersAndGroups"), list) and r.get("allowedUsersAndGroups")
+        ),
+        "packagesWithAcquiredUsers": sum(
+            1 for r in rows
+            if isinstance(r.get("acquireUsersAndGroups"), list) and r.get("acquireUsersAndGroups")
+        ),
+    }
+
+
+def _format_counter_for_text(counter_dict, top=None):
+    """Turn {label: count} into 'label (N), label (N)' text."""
+    items = list(counter_dict.items())
+    if top:
+        items = items[:top]
+    return ", ".join(f"{k} ({v})" for k, v in items) if items else "None"
+
+
+def _build_detail_statistical_fallback(agg):
+    """Build a plain-text executive detail summary from aggregated statistics."""
+    total = agg["sampledCount"]
+    cat_parts = _format_counter_for_text(agg["byCategory"], top=8)
+    host_parts = _format_counter_for_text(agg["bySupportedHost"])
+    elem_parts = _format_counter_for_text(agg["byElementType"])
+    restricted = agg["packagesWithRestrictedAccess"]
+    acquired = agg["packagesWithAcquiredUsers"]
+
+    restricted_note = (
+        f"{restricted} package(s) have restricted allowedUsersAndGroups policies."
+        if restricted
+        else "No packages in the sampled set have restricted-access policies."
+    )
+    acquired_note = (
+        f"{acquired} package(s) show active user acquisition entries."
+        if acquired
+        else "No active user acquisition entries found in the sampled set."
+    )
+
+    return (
+        f"Detailed metadata was retrieved for {total} packages. "
+        f"Category distribution: {cat_parts}. "
+        f"Supported hosts: {host_parts}. "
+        f"Element types in use: {elem_parts}. "
+        f"{restricted_note} {acquired_note}"
+    )
+
+
+def summarize_details_executive(details):
+    """Single AI call with aggregated package detail statistics.
+
+    Returns:
+        tuple: (ai_text_or_None, fallback_text)
+    """
+    agg = _aggregate_details(details)
+    fallback_text = _build_detail_statistical_fallback(agg)
+
+    token, _ = _get_token_cached()
+    if not token:
+        return None, fallback_text
+
+    auth_headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    request_body = {
+        "model": DEFAULT_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a Microsoft 365 readiness analyst and Agent 365 adoption advisor. "
+                    "Given aggregated statistics from detailed Copilot catalog package metadata, "
+                    "produce a concise executive summary for an IT admin audience covering: "
+                    "the distribution of categories and element types relevant to Agent 365 integration, "
+                    "which hosts and platforms are supported (desktop, mobile, web), "
+                    "version distribution signals and API compatibility, "
+                    "access restriction and user acquisition patterns that affect deployment strategy, "
+                    "and recommendations for Agent 365 adoption roadmap including which packages are best-suited for agent automation. "
+                    "Return plain text only. No markdown, no bullet points, no headers."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Summarize this Copilot package detail analysis for an executive readiness report:\n"
+                    + json.dumps(agg, ensure_ascii=True)
+                ),
+            },
+        ],
+        "temperature": 0.3,
+    }
+
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            for attempt in range(MAX_RETRIES):
+                response = client.post(DEFAULT_API_URL, json=request_body, headers=auth_headers)
+                if response.status_code < 400:
+                    text = _extract_text(response.json())
+                    return (text or None), fallback_text
+                if response.status_code == 429 or 500 <= response.status_code <= 599:
+                    if attempt < MAX_RETRIES - 1:
+                        retry_after = _parse_retry_after(response.headers)
+                        wait = retry_after if retry_after is not None else (1.5 * (attempt + 1)) + random.uniform(0.0, 0.8)
+                        time.sleep(max(0.5, min(wait, 15.0)))
+                        continue
+                break
+    except Exception:
+        pass
+
+    return None, fallback_text

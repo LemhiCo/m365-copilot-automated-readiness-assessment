@@ -1,5 +1,6 @@
 """Service pipeline functions for orchestrator."""
 
+import asyncio
 import os
 from .spinner import get_timestamp, _stdout_lock
 from .orchestrator_powershell import collect_purview_data_via_powershell
@@ -267,69 +268,134 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             return {'available': False, 'recommendations': []}
 
     async def a365_pipeline():
-        """A365: Gather catalog packages, then process."""
+        """A365: Gather catalog and package details, then process both."""
         if not run_a365:
             return {'available': False, 'recommendations': []}
 
         try:
             import sys
 
-            with _stdout_lock:
-                sys.stdout.write(f'\r[{get_timestamp()}]   A365 Data Gathering     [░░░░░░░░░░░░░░░░░░░░]   0%')
-                sys.stdout.flush()
-
+            # --- Phase 1: Catalog fetch + Per-package detail fetch ---
             from .a365.get_a365_client import get_a365_client
             a365_client = await get_a365_client(tenant_id)
-
-            with _stdout_lock:
-                sys.stdout.write(f'\r[{get_timestamp()}]   ✓ A365 Data Gathering     [████████████████████] 100%\n')
-                sys.stdout.flush()
 
             if a365_client is None:
                 return {'available': False, 'recommendations': []}
 
-            last_percent = -1
+            # Extract token and package IDs for detail fetch.
+            # Only P_* IDs are package-backed entries with full metadata support.
+            # T_* IDs are title/template/internal registry entries (preview-only,
+            # no detail endpoint support) and are intentionally excluded.
+            access_token = a365_client.get("_access_token") or ""
+            catalog_values = a365_client.get("value", []) if isinstance(a365_client.get("value", []), list) else []
+            api_total_agents = a365_client.get("@odata.count")
+            if not isinstance(api_total_agents, int):
+                try:
+                    api_total_agents = int(api_total_agents)
+                except Exception:
+                    api_total_agents = len(catalog_values)
+            package_ids = [
+                p.get("id") for p in catalog_values
+                if isinstance(p, dict) and p.get("id") and p.get("id", "").startswith("P_")
+            ]
+            progress_total_agents = max(api_total_agents, len(package_ids))
+            non_detailable_agents = max(0, progress_total_agents - len(package_ids))
 
-            def update_a365_progress(processed, total):
-                nonlocal last_percent
-                if total <= 0:
+            last_detail_percent = -1
+
+            def update_detail_progress(done, total):
+                nonlocal last_detail_percent
+                display_done = min(progress_total_agents, done + non_detailable_agents)
+                display_total = progress_total_agents
+                if display_total <= 0:
                     percent = 100
                     filled = 20
                 else:
-                    ratio = processed / total
+                    ratio = display_done / display_total
                     percent = int(ratio * 100)
                     filled = int(ratio * 20)
-
-                    # Avoid a misleading "0%" display once work has started on large catalogs.
-                    if processed > 0 and percent == 0:
+                    if display_done > 0 and percent == 0:
                         percent = 1
-                    if processed > 0 and filled == 0:
+                    if display_done > 0 and filled == 0:
                         filled = 1
-
-                    if processed >= total:
+                    if display_done >= display_total:
                         percent = 100
                         filled = 20
-
-                # Avoid flooding terminals that don't reliably handle carriage-return updates.
-                if processed not in (0, total) and percent == last_percent:
+                if display_done not in (0, display_total) and percent == last_detail_percent:
                     return
-                last_percent = percent
-
+                last_detail_percent = percent
                 bar = '█' * filled + '░' * (20 - filled)
-                counts = f'({processed}/{total})' if total > 0 else '(0/0)'
-                line = f'A365 Data Processing [{bar}] {percent:3d}% {counts}'
+                counts = f'({display_done}/{display_total} Agents)' if display_total > 0 else '(0/0 Agents)'
+                line = f'[{get_timestamp()}]   A365 Data Gathering     [{bar}] {percent:3d}% {counts}'
                 with _stdout_lock:
-                    sys.stdout.write('\r' + line.ljust(90))
+                    if display_done >= display_total:
+                        sys.stdout.write(f'\r[{get_timestamp()}]   ✓ A365 Data Gathering     [████████████████████] 100% {counts}\n')
+                    else:
+                        sys.stdout.write('\r' + line)
                     sys.stdout.flush()
 
+            # Show initial gathering line once, then update in place.
+            update_detail_progress(0, progress_total_agents)
+
+            from .a365.get_a365_detail_client import get_a365_details
+            details = await get_a365_details(
+                access_token,
+                package_ids,
+                progress_callback=update_detail_progress,
+                silent=True,
+                api_total_agents=api_total_agents,
+            )
+
+            # --- Phase 2: Processing ---
+            processing_percent = 0
+            processing_active = True
+
+            def write_processing_line(percent):
+                clamped = max(0, min(100, int(percent)))
+                filled = int(clamped * 20 / 100)
+                bar = '█' * filled + '░' * (20 - filled)
+                with _stdout_lock:
+                    sys.stdout.write(
+                        f'\r[{get_timestamp()}]   A365 Data Processing    [{bar}] {clamped:3d}%'.ljust(100)
+                    )
+                    sys.stdout.flush()
+
+            async def update_processing_progress():
+                nonlocal processing_percent, processing_active
+                while processing_active:
+                    # Keep the line moving while long-running AI summarization is in progress.
+                    if processing_percent < 95:
+                        processing_percent += 1
+                        write_processing_line(processing_percent)
+                    await asyncio.sleep(0.35)
+
+            write_processing_line(0)
+            processing_task = asyncio.create_task(update_processing_progress())
+
             from .a365.get_a365_info import get_a365_info
-            result = await get_a365_info(a365_client, progress_callback=update_a365_progress)
+            catalog_result = await get_a365_info(a365_client)
+            processing_percent = max(processing_percent, 55)
+            write_processing_line(processing_percent)
+
+            from .a365.get_a365_detail_info import get_a365_detail_info
+            detail_result = await get_a365_detail_info(details)
+
+            processing_percent = max(processing_percent, 90)
+            write_processing_line(processing_percent)
+            processing_active = False
+            processing_task.cancel()
 
             with _stdout_lock:
                 sys.stdout.write(f'\r[{get_timestamp()}]   ✓ A365 Data Processing    [████████████████████] 100%\n')
                 sys.stdout.flush()
 
-            return result
+            # Catalog summary rows first, then detail rows.
+            combined_recs = (
+                catalog_result.get("recommendations", [])
+                + detail_result.get("recommendations", [])
+            )
+            return {**catalog_result, "recommendations": combined_recs}
+
         except Exception:
             return {'available': False, 'recommendations': []}
     
