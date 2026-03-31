@@ -473,7 +473,7 @@ async def get_defender_client(tenant_id, graph_client):
         
         defender_scope = "https://api.securitycenter.microsoft.com/.default"
         defender_token = credential.get_token(defender_scope)
-        
+
         # Decode token to verify permissions
         import base64
         import json
@@ -482,7 +482,13 @@ async def get_defender_client(tenant_id, graph_client):
         payload = token_parts[1] + '=' * (4 - len(token_parts[1]) % 4)
         decoded = json.loads(base64.urlsafe_b64decode(payload))
         roles = decoded.get('roles', [])
-        
+
+        # The /api/incidents endpoint is backed by the Microsoft Threat Protection
+        # resource (api.security.microsoft.com) and requires a separate token scope.
+        # All other MDE endpoints accept the api.securitycenter.microsoft.com token.
+        mtp_scope = "https://api.security.microsoft.com/.default"
+        mtp_token = credential.get_token(mtp_scope)
+
         # Create HTTP client for Defender API
         import httpx
         defender_http = httpx.AsyncClient(
@@ -494,11 +500,21 @@ async def get_defender_client(tenant_id, graph_client):
             },
             timeout=30.0
         )
-        
+
+        mtp_http = httpx.AsyncClient(
+            base_url="https://api.security.microsoft.com",
+            headers={
+                "Authorization": f"Bearer {mtp_token.token}",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            timeout=30.0
+        )
+
         defender_tasks = {}
-        
-        # Fetch incidents (more detailed than Graph version)
-        defender_tasks['incidents'] = defender_http.get("/api/incidents")
+
+        # Fetch incidents — uses MTP token (api.security.microsoft.com scope)
+        defender_tasks['incidents'] = mtp_http.get("/api/incidents")
         
         # Fetch machines/devices (Defender for Endpoint)
         defender_tasks['machines'] = defender_http.get("/api/machines")
@@ -866,8 +882,9 @@ async def get_defender_client(tenant_id, graph_client):
                 'trend': defender_results['exposure_score'].get('rbacGroupName', 'Unknown')  # Trend not always available
             }
         
-        # Close Defender HTTP client
+        # Close Defender HTTP clients
         await defender_http.aclose()
+        await mtp_http.aclose()
         
         # Mark overall availability
         client.available = client.graph_security_available or client.defender_api_available
