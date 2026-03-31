@@ -33,22 +33,22 @@ def _stat_recommendations(agg):
             status="Success",
         ))
 
-    # Package types
+    # Agent types
     _rec(
         "Catalog: Package Types",
-        f"Of {total} packages in the catalog, the breakdown by type is: {_format_distribution(agg['byType'])}.",
+        f"Of {total} agents in the catalog, the breakdown by type is: {_format_distribution(agg['byType'])}.",
     )
 
     # Availability
     _rec(
         "Catalog: Availability Distribution",
-        f"Package availability (availableTo) distribution across {total} entries: {_format_distribution(agg['byAvailableTo'])}.",
+        f"Agent availability (availableTo) distribution across {total} entries: {_format_distribution(agg['byAvailableTo'])}.",
     )
 
     # Deployment
     _rec(
         "Catalog: Deployment Distribution",
-        f"Package deployment (deployedTo) distribution across {total} entries: {_format_distribution(agg['byDeployedTo'])}.",
+        f"Agent deployment (deployedTo) distribution across {total} entries: {_format_distribution(agg['byDeployedTo'])}.",
     )
 
     # Platforms
@@ -67,9 +67,9 @@ def _stat_recommendations(agg):
     blocked = agg["blockedCount"]
     _rec(
         "Catalog: Blocked Packages",
-        f"{blocked} of {total} packages are marked as blocked (isBlocked=true)."
+        f"{blocked} of {total} agents are marked as blocked (isBlocked=true)."
         if blocked
-        else f"No packages are currently marked as blocked across the {total}-entry catalog.",
+        else f"No agents are currently marked as blocked across the {total}-entry catalog.",
     )
 
     return recs
@@ -119,7 +119,7 @@ async def get_a365_info(a365_client, progress_callback=None):
                 agg = agg or _aggregate_catalog(valid_packages)
                 executive_summary = _build_statistical_fallback(agg)
             except Exception:
-                executive_summary = f"The Copilot catalog contains {total_valid} packages. Review availability and deployment status for readiness gaps."
+                executive_summary = f"The Copilot catalog contains {total_valid} agents. Review availability and deployment status for readiness gaps."
     else:
         # No AI token — still produce a statistical observation.
         try:
@@ -127,14 +127,14 @@ async def get_a365_info(a365_client, progress_callback=None):
             agg = _aggregate_catalog(valid_packages)
             executive_summary = _build_statistical_fallback(agg)
         except Exception:
-            executive_summary = f"The Copilot catalog contains {total_valid} packages."
+            executive_summary = f"The Copilot catalog contains {total_valid} agents."
 
     recommendations = [
         new_recommendation(
             service="A365",
             feature="Copilot Catalog Overview",
             observation=executive_summary,
-            recommendation="Use this catalog overview to baseline your Copilot package landscape and identify which packages could support Agent 365 integration. Review package types, availability, and deployment patterns to inform your agent automation strategy. Consider license dependencies and deployment scope when planning which packages agents should be able to access.",
+            recommendation="Use this catalog overview to baseline your Copilot agent landscape and identify which agents could support Agent 365 integration. Review agent types, availability, and deployment patterns to inform your agent automation strategy. Consider license dependencies and deployment scope when planning which agents should be accessible.",
             priority="High",
             link_text="Agent 365 Documentation",
             link_url="https://learn.microsoft.com/en-us/microsoft-agent-365/",

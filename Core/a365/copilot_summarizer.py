@@ -573,10 +573,10 @@ def _build_statistical_fallback(agg):
     deploy_parts = ", ".join(f"{v} {k}" for k, v in agg["byDeployedTo"].items())
     platform_parts = ", ".join(f"{k} ({v})" for k, v in list(agg["byPlatform"].items())[:5])
     blocked = agg["blockedCount"]
-    blocked_note = f"{blocked} package(s) are marked as blocked." if blocked else "No packages are currently blocked."
+    blocked_note = f"{blocked} agent(s) are marked as blocked." if blocked else "No agents are currently blocked."
 
     return (
-        f"The Copilot catalog contains {total} packages. "
+        f"The Copilot catalog contains {total} agents. "
         f"Availability distribution: {avail_parts}. "
         f"Deployment distribution: {deploy_parts}. "
         f"Platform representation: {platform_parts}. "
@@ -611,9 +611,9 @@ def summarize_catalog_executive(packages):
                 "role": "system",
                 "content": (
                     "You are a Microsoft 365 readiness analyst. "
-                    "Given aggregated statistics about Copilot catalog packages, "
+                    "Given aggregated statistics about Copilot catalog agents, "
                     "produce a concise executive summary for an IT admin audience covering: "
-                    "the breadth and nature of packages in the catalog, "
+                    "the breadth and nature of agents in the catalog, "
                     "the distribution of availability and deployment status (availableTo / deployedTo), "
                     "any blocked or restricted entries, "
                     "notable publishers or platforms represented, "
@@ -714,18 +714,18 @@ def _build_detail_statistical_fallback(agg):
     acquired = agg["packagesWithAcquiredUsers"]
 
     restricted_note = (
-        f"{restricted} package(s) have restricted allowedUsersAndGroups policies."
+        f"{restricted} agent(s) have restricted allowedUsersAndGroups policies."
         if restricted
-        else "No packages in the sampled set have restricted-access policies."
+        else "No agents in the sampled set have restricted-access policies."
     )
     acquired_note = (
-        f"{acquired} package(s) show active user acquisition entries."
+        f"{acquired} agent(s) show active user acquisition entries."
         if acquired
         else "No active user acquisition entries found in the sampled set."
     )
 
     return (
-        f"Detailed metadata was retrieved for {total} packages. "
+        f"Detailed metadata was retrieved for {total} agents. "
         f"Category distribution: {cat_parts}. "
         f"Supported hosts: {host_parts}. "
         f"Element types in use: {elem_parts}. "
@@ -758,20 +758,20 @@ def summarize_details_executive(details):
                 "role": "system",
                 "content": (
                     "You are a Microsoft 365 readiness analyst and Agent 365 adoption advisor. "
-                    "Given aggregated statistics from detailed Copilot catalog package metadata, "
+                    "Given aggregated statistics from detailed Copilot catalog agent metadata, "
                     "produce a concise executive summary for an IT admin audience covering: "
                     "the distribution of categories and element types relevant to Agent 365 integration, "
                     "which hosts and platforms are supported (desktop, mobile, web), "
                     "version distribution signals and API compatibility, "
                     "access restriction and user acquisition patterns that affect deployment strategy, "
-                    "and recommendations for Agent 365 adoption roadmap including which packages are best-suited for agent automation. "
+                    "and recommendations for Agent 365 adoption roadmap including which agents are best-suited for automation. "
                     "Return plain text only. No markdown, no bullet points, no headers."
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    "Summarize this Copilot package detail analysis for an executive readiness report:\n"
+                    "Summarize this Copilot agent detail analysis for an executive readiness report:\n"
                     + json.dumps(agg, ensure_ascii=True)
                 ),
             },
@@ -797,3 +797,151 @@ def summarize_details_executive(details):
         pass
 
     return None, fallback_text
+
+
+def _build_detail_recommendation_fallback(observation):
+    """Build a fallback recommendation when AI is unavailable."""
+    return (
+        "Review the detailed breakdown of supported hosts, element types, access restrictions, and user acquisition patterns to align "
+        "agent deployments with Agent 365 integration requirements. Prioritize agents suitable for automation based on supported hosts "
+        "matching your agent target platforms and element type coverage. Use this analysis to create an Agent 365 rollout strategy that "
+        "maximizes agent capabilities while respecting access and deployment constraints."
+    )
+
+
+def generate_detail_recommendation_from_observation(observation):
+    """Generate an AI-based recommendation for Package Detail Overview based on the observation.
+
+    Args:
+        observation: The observation text (typically the AI-generated executive summary).
+
+    Returns:
+        str: Recommendation text or fallback text if AI is unavailable.
+    """
+    fallback = _build_detail_recommendation_fallback(observation)
+
+    token, _ = _get_token_cached()
+    if not token:
+        return fallback
+
+    auth_headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    request_body = {
+        "model": DEFAULT_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a Microsoft 365 and Agent 365 adoption advisor. "
+                    "Based on a given observation about Copilot agent details, "
+                    "generate a concise, actionable recommendation specifically focused on how Agent 365 can help "
+                    "address the situation described in the observation. "
+                    "Your recommendation should help the customer: "
+                    "1) understand the strategic value of Agent 365 for the agents and capabilities observed, "
+                    "2) identify deployment priorities that align Agent 365 automation with the agent landscape, "
+                    "3) define an Agent 365 adoption roadmap that maximizes value while respecting deployment constraints. "
+                    "Return plain text only, 3-4 sentences. No markdown, no bullet points, no headers."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Based on this Copilot agent detail observation, generate an Agent 365 adoption recommendation:\n\n"
+                    + str(observation)
+                ),
+            },
+        ],
+        "temperature": 0.3,
+    }
+
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            for attempt in range(MAX_RETRIES):
+                response = client.post(DEFAULT_API_URL, json=request_body, headers=auth_headers)
+
+                if response.status_code < 400:
+                    text = _extract_text(response.json())
+                    return (text or fallback) if text else fallback
+
+                if response.status_code == 429 or 500 <= response.status_code <= 599:
+                    if attempt < MAX_RETRIES - 1:
+                        retry_after = _parse_retry_after(response.headers)
+                        wait = retry_after if retry_after is not None else (1.5 * (attempt + 1)) + random.uniform(0.0, 0.8)
+                        time.sleep(max(0.5, min(wait, 15.0)))
+                        continue
+                break
+    except Exception:
+        pass
+
+    return fallback
+
+
+def generate_stat_recommendation_from_observation(feature, observation, fallback):
+    """Generate an AI recommendation for a specific stat feature observation.
+
+    Args:
+        feature: Stat feature label (for example, Package Detail: Supported Hosts).
+        observation: Observation text for that feature.
+        fallback: Rule-based fallback recommendation.
+
+    Returns:
+        str: AI recommendation when available, otherwise fallback.
+    """
+    token, _ = _get_token_cached()
+    if not token:
+        return fallback
+
+    auth_headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    request_body = {
+        "model": DEFAULT_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a Microsoft 365 and Agent 365 adoption advisor. "
+                    "Generate one concise recommendation grounded in the provided observation and focused on specific Agent 365 capabilities. "
+                    "The recommendation must explicitly connect the observation to practical Agent 365 capabilities such as "
+                    "agent orchestration, Teams-based agent delivery, Copilot extensibility, API/webhook integrations, access scope planning, "
+                    "or deployment governance. "
+                    "Return plain text only, 2-4 sentences, no markdown, no bullets, no headers."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Feature: {feature}\n"
+                    f"Observation: {observation}\n"
+                    "Write a recommendation on how Agent 365 can help with this exact observation."
+                ),
+            },
+        ],
+        "temperature": 0.3,
+    }
+
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            for attempt in range(MAX_RETRIES):
+                response = client.post(DEFAULT_API_URL, json=request_body, headers=auth_headers)
+
+                if response.status_code < 400:
+                    text = _extract_text(response.json())
+                    return (text or fallback) if text else fallback
+
+                if response.status_code == 429 or 500 <= response.status_code <= 599:
+                    if attempt < MAX_RETRIES - 1:
+                        retry_after = _parse_retry_after(response.headers)
+                        wait = retry_after if retry_after is not None else (1.5 * (attempt + 1)) + random.uniform(0.0, 0.8)
+                        time.sleep(max(0.5, min(wait, 15.0)))
+                        continue
+                break
+    except Exception:
+        pass
+
+    return fallback

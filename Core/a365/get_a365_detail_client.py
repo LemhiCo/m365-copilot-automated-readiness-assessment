@@ -186,13 +186,13 @@ async def get_a365_details(
             )
             print(
                 f"[{get_timestamp()}] [INFO] A365 detail fetch complete: API has full metadata for "
-                f"{len(results)} packages out of {summary_total} Agents and not for remaining {summary_total - len(results)} Agents "
+                f"{len(results)} Agents out of {summary_total} Agents and not for remaining {summary_total - len(results)} Agents "
                 f"(non-metadata failures: {error_count}; {error_breakdown})."
             )
         else:
             print(
                 f"[{get_timestamp()}] [INFO] A365 detail fetch complete: API has full metadata for "
-                f"{len(results)} packages out of {summary_total} Agents and not for remaining {summary_total - len(results)} Agents."
+                f"{len(results)} Agents out of {summary_total} Agents and not for remaining {summary_total - len(results)} Agents."
             )
 
     return results

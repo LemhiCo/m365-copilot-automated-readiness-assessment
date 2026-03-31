@@ -63,7 +63,7 @@ def _extract_capability_signal(package_row):
 
 
 def _extract_purpose_signal(package_row):
-    """Summarize what the package/agent does from descriptive fields."""
+    """Summarize what the agent does from descriptive fields."""
     return _first_present_text(
         package_row,
         (
@@ -168,14 +168,14 @@ def _build_human_fallback_observation(package_name, package_type, package_id, pa
     )
 
     return (
-        f"{package_name} is listed in the Copilot package catalog as a {package_type} package (ID: {package_id}), and {purpose_text}.\n"
+        f"{package_name} is listed in the Copilot agent catalog as a {package_type} agent (ID: {package_id}), and {purpose_text}.\n"
         f"{lifecycle_sentence}\n"
         f"Current catalog status is '{package_status}'. {risk_signal}. Tags recorded: {tags_text}."
     )
 
 
 def _extract_risk_signal(package_row, status_text):
-    """Derive a basic risk/status signal from package metadata."""
+    """Derive a basic risk/status signal from agent metadata."""
     status = _normalize_text(status_text) or "Unknown"
     lowered = status.lower()
 
