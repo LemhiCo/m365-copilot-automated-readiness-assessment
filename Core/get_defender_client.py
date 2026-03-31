@@ -598,23 +598,25 @@ async def get_defender_client(tenant_id, graph_client):
         | limit 100
         """
         
-        # Execute all Advanced Hunting queries
-        defender_tasks['hunting_copilot_processes'] = defender_http.post(
+        # Execute all Advanced Hunting queries — uses MTP token (api.security.microsoft.com scope)
+        # The /api/advancedhunting/run endpoint requires AdvancedHunting.Read.All from the MTP
+        # resource; the api.securitycenter.microsoft.com token returns 403 for this endpoint.
+        defender_tasks['hunting_copilot_processes'] = mtp_http.post(
             "/api/advancedhunting/run",
             json={"Query": copilot_process_query}
         )
-        
-        defender_tasks['hunting_copilot_network'] = defender_http.post(
+
+        defender_tasks['hunting_copilot_network'] = mtp_http.post(
             "/api/advancedhunting/run",
             json={"Query": copilot_network_query}
         )
-        
-        defender_tasks['hunting_copilot_files'] = defender_http.post(
+
+        defender_tasks['hunting_copilot_files'] = mtp_http.post(
             "/api/advancedhunting/run",
             json={"Query": copilot_file_access_query}
         )
-        
-        defender_tasks['hunting_copilot_emails'] = defender_http.post(
+
+        defender_tasks['hunting_copilot_emails'] = mtp_http.post(
             "/api/advancedhunting/run",
             json={"Query": copilot_email_query}
         )
