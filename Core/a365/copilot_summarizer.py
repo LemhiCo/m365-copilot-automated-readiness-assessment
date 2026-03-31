@@ -20,6 +20,23 @@ DEFAULT_API_URL = "https://models.inference.ai.azure.com/chat/completions"
 MAX_RETRIES = 3
 DEFAULT_MAX_CALLS = 120
 
+# Curated, verified Agent 365 doc URLs. AI link selection must stay within this allowlist.
+AGENT365_DOC_ALLOWLIST = {
+    "Overview": "https://learn.microsoft.com/en-us/microsoft-agent-365/overview",
+    "Admin Overview": "https://learn.microsoft.com/en-us/microsoft-agent-365/",
+    "Developer Overview": "https://learn.microsoft.com/en-us/microsoft-agent-365/developer/",
+    "Developer Registration": "https://learn.microsoft.com/en-us/microsoft-agent-365/developer/registration",
+    "Tooling Servers": "https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview",
+    "Responsible AI": "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/responsible-ai-overview",
+    "Entra": "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/capabilities-entra",
+    "Governance": "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/capabilities-entra#agent-governance-and-lifecycles",
+    "Observability": "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/capabilities-entra#register-and-manage-agents",
+    "Security": "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/capabilities-entra#protect-agent-access-to-resources",
+    # No dedicated Agent 365 Defender/Purview pages were discovered; map to closest verified pages.
+    "Defender": "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/capabilities-entra#protect-agent-access-to-resources",
+    "Purview": "https://learn.microsoft.com/en-us/microsoft-agent-365/admin/responsible-ai-overview",
+}
+
 
 _state_lock = threading.Lock()
 _cached_token = None
@@ -97,6 +114,83 @@ def _extract_text(response_json):
         return response_json["choices"][0]["message"]["content"].strip()
     except Exception:
         return ""
+
+
+def choose_agent365_doc_url(feature, observation, default_url=None):
+    """Select the best Agent 365 doc URL from the verified allowlist.
+
+    Always returns a URL present in AGENT365_DOC_ALLOWLIST.
+    """
+    fallback = default_url or AGENT365_DOC_ALLOWLIST["Overview"]
+    if fallback not in AGENT365_DOC_ALLOWLIST.values():
+        fallback = AGENT365_DOC_ALLOWLIST["Overview"]
+
+    token, _ = _get_token_cached()
+    if not token:
+        return fallback
+
+    auth_headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    allowlist_rows = [
+        {"topic": topic, "url": url}
+        for topic, url in AGENT365_DOC_ALLOWLIST.items()
+    ]
+
+    request_body = {
+        "model": DEFAULT_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You select the single best documentation URL for an A365 recommendation. "
+                    "Choose only from the provided allowlist. "
+                    "Return JSON only: {\"url\":\"<exact-allowlisted-url>\"}."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Feature: " + str(feature) + "\n"
+                    + "Observation: " + str(observation) + "\n"
+                    + "Allowlist:\n"
+                    + json.dumps(allowlist_rows, ensure_ascii=True)
+                    + "\nPick the single best URL."
+                ),
+            },
+        ],
+        "temperature": 0.0,
+        "max_tokens": 120,
+    }
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            for attempt in range(MAX_RETRIES):
+                response = client.post(DEFAULT_API_URL, json=request_body, headers=auth_headers)
+                if response.status_code < 400:
+                    text = _extract_text(response.json())
+                    json_text = _extract_json_block(text)
+                    try:
+                        parsed = json.loads(json_text or "{}")
+                        url = str(parsed.get("url") or "").strip()
+                        if url in AGENT365_DOC_ALLOWLIST.values():
+                            return url
+                    except Exception:
+                        pass
+                    return fallback
+                if response.status_code == 429 or 500 <= response.status_code <= 599:
+                    if attempt < MAX_RETRIES - 1:
+                        retry_after = _parse_retry_after(response.headers)
+                        wait = retry_after if retry_after is not None else (1.0 * (attempt + 1)) + random.uniform(0.0, 0.5)
+                        time.sleep(max(0.5, min(wait, 8.0)))
+                        continue
+                break
+    except Exception:
+        pass
+
+    return fallback
 
 
 def _parse_retry_after(headers):
@@ -809,6 +903,52 @@ def _build_detail_recommendation_fallback(observation):
     )
 
 
+def _ground_recommendation_text(observation, recommendation, fallback):
+    """Normalize AI recommendation text to remain evidence-based and observation-grounded."""
+    text = (recommendation or "").strip()
+    if not text:
+        return fallback
+
+    obs = str(observation or "")
+    obs_l = obs.lower()
+    text_l = text.lower()
+
+    # Only call out explicit issues when the observation itself contains risk/problem signals.
+    issue_inference_tokens = ("issue", "problem", "gap", "deficiency")
+    evidence_tokens = (
+        "error",
+        "failed",
+        "blocked",
+        "deprecated",
+        "restriction",
+        "restricted",
+        "risk",
+    )
+    has_issue_language = any(t in text_l for t in issue_inference_tokens)
+    has_issue_evidence = any(t in obs_l for t in evidence_tokens)
+    if has_issue_language and not has_issue_evidence:
+        text = re.sub(r"\b[Ii]ssue\b", "pattern", text)
+        text = re.sub(r"\b[Pp]roblem\b", "pattern", text)
+        text = re.sub(r"\b[Gg]ap\b", "variation", text)
+        text = re.sub(r"\b[Dd]eficiency\b", "variation", text)
+
+    # Ensure recommendation remains explicitly Agent 365-oriented.
+    if "agent 365" not in text.lower():
+        text = f"Use Agent 365 capabilities to act on the observed pattern. {text}"
+
+    # Ensure at least one concrete observed token (version/count) is referenced.
+    observed_token = None
+    for pattern in (r"\b\d+\.\d+\.\d+\.\d+\b", r"\b\d+\.\d+\.\d+\b", r"\b\d+\b"):
+        m = re.search(pattern, obs)
+        if m:
+            observed_token = m.group(0)
+            break
+    if observed_token and observed_token not in text:
+        text = f"{text} Align actions with the observed distribution markers (for example, {observed_token})."
+
+    return text
+
+
 def generate_detail_recommendation_from_observation(observation):
     """Generate an AI-based recommendation for Package Detail Overview based on the observation.
 
@@ -838,11 +978,13 @@ def generate_detail_recommendation_from_observation(observation):
                     "You are a Microsoft 365 and Agent 365 adoption advisor. "
                     "Based on a given observation about Copilot agent details, "
                     "generate a concise, actionable recommendation specifically focused on how Agent 365 can help "
-                    "address the situation described in the observation. "
+                    "address the exact observation provided. "
                     "Your recommendation should help the customer: "
                     "1) understand the strategic value of Agent 365 for the agents and capabilities observed, "
                     "2) identify deployment priorities that align Agent 365 automation with the agent landscape, "
                     "3) define an Agent 365 adoption roadmap that maximizes value while respecting deployment constraints. "
+                    "Do not label something as an issue/problem unless the observation explicitly states a risk/failure signal. "
+                    "Reference at least one concrete value from the observation. "
                     "Return plain text only, 3-4 sentences. No markdown, no bullet points, no headers."
                 ),
             },
@@ -864,7 +1006,9 @@ def generate_detail_recommendation_from_observation(observation):
 
                 if response.status_code < 400:
                     text = _extract_text(response.json())
-                    return (text or fallback) if text else fallback
+                    if text:
+                        return _ground_recommendation_text(observation, text, fallback)
+                    return fallback
 
                 if response.status_code == 429 or 500 <= response.status_code <= 599:
                     if attempt < MAX_RETRIES - 1:
@@ -910,6 +1054,8 @@ def generate_stat_recommendation_from_observation(feature, observation, fallback
                     "The recommendation must explicitly connect the observation to practical Agent 365 capabilities such as "
                     "agent orchestration, Teams-based agent delivery, Copilot extensibility, API/webhook integrations, access scope planning, "
                     "or deployment governance. "
+                    "Do not infer an issue/problem unless the observation explicitly indicates one. "
+                    "Reference at least one concrete value or label from the observation. "
                     "Return plain text only, 2-4 sentences, no markdown, no bullets, no headers."
                 ),
             },
@@ -932,7 +1078,9 @@ def generate_stat_recommendation_from_observation(feature, observation, fallback
 
                 if response.status_code < 400:
                     text = _extract_text(response.json())
-                    return (text or fallback) if text else fallback
+                    if text:
+                        return _ground_recommendation_text(observation, text, fallback)
+                    return fallback
 
                 if response.status_code == 429 or 500 <= response.status_code <= 599:
                     if attempt < MAX_RETRIES - 1:

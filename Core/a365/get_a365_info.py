@@ -35,7 +35,7 @@ def _stat_recommendations(agg):
 
     # Agent types
     _rec(
-        "Catalog: Package Types",
+        "Catalog: Agent Types",
         f"Of {total} agents in the catalog, the breakdown by type is: {_format_distribution(agg['byType'])}.",
     )
 
@@ -66,7 +66,7 @@ def _stat_recommendations(agg):
     # Blocked
     blocked = agg["blockedCount"]
     _rec(
-        "Catalog: Blocked Packages",
+        "Catalog: Blocked Agents",
         f"{blocked} of {total} agents are marked as blocked (isBlocked=true)."
         if blocked
         else f"No agents are currently marked as blocked across the {total}-entry catalog.",
@@ -132,7 +132,7 @@ async def get_a365_info(a365_client, progress_callback=None):
     recommendations = [
         new_recommendation(
             service="A365",
-            feature="Copilot Catalog Overview",
+            feature="Agent Catalog Overview",
             observation=executive_summary,
             recommendation="Use this catalog overview to baseline your Copilot agent landscape and identify which agents could support Agent 365 integration. Review agent types, availability, and deployment patterns to inform your agent automation strategy. Consider license dependencies and deployment scope when planning which agents should be accessible.",
             priority="High",
