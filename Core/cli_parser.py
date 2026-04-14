@@ -23,6 +23,7 @@ def parse_arguments(tenant_id_default, services_default):
 Examples:
   python main.py
   python main.py --services M365
+    python main.py --services A365
   python main.py --services M365 Entra Defender
   python main.py --tenant-id "your-tenant-id" --services Purview
         '''
@@ -37,7 +38,7 @@ Examples:
         '--services', 
         nargs='*', 
         default=services_default,
-        help=f'Services to analyze: M365, Entra, Defender, Purview, "Power Platform", "Copilot Studio" (default: {services_default or "all services"})'
+        help=f'Services to analyze: M365, Entra, Defender, Purview, "Power Platform", "Copilot Studio", A365 (default: {services_default or "all services"})'
     )
     
     return parser.parse_args()

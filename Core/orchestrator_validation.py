@@ -18,7 +18,7 @@ def validate_and_prepare_services(services):
         services = []
     
     # Validate services
-    valid_services = {"M365", "Entra", "Defender", "Purview", "Power Platform", "Copilot Studio"}
+    valid_services = {"M365", "Entra", "Defender", "Purview", "Power Platform", "Copilot Studio", "A365"}
     invalid_services = [s for s in services if s not in valid_services]
     if invalid_services:
         print(f"[{get_timestamp()}] ⚠️  Invalid services specified: {', '.join(invalid_services)}")
@@ -33,9 +33,10 @@ def validate_and_prepare_services(services):
     run_purview = run_all or "Purview" in services
     run_power_platform = run_all or "Power Platform" in services
     run_copilot_studio = run_all or "Copilot Studio" in services
+    run_a365 = run_all or "A365" in services
     
     # Count services that will be loaded
-    services_to_load = sum([run_m365, run_entra, run_defender, run_purview, run_power_platform, run_copilot_studio])
+    services_to_load = sum([run_m365, run_entra, run_defender, run_purview, run_power_platform, run_copilot_studio, run_a365])
     
     return {
         'run_all': run_all,
@@ -45,6 +46,7 @@ def validate_and_prepare_services(services):
         'run_purview': run_purview,
         'run_power_platform': run_power_platform,
         'run_copilot_studio': run_copilot_studio,
+        'run_a365': run_a365,
         'services_to_load': services_to_load,
         'services': services
     }

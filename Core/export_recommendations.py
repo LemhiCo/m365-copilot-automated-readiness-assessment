@@ -144,6 +144,9 @@ def export_to_excel(recommendations, filename=None):
         "Low": "95E1D3"
     }
     
+    # Columns that need text wrapping (1-based: E=5 Observation, F=6 Recommendation)
+    wrap_columns = {5, 6}
+
     # Add data rows
     for rec in recommendations:
         row = [
@@ -157,14 +160,21 @@ def export_to_excel(recommendations, filename=None):
             rec.get("LinkUrl", "")
         ]
         ws.append(row)
-        
+
+        row_num = ws.max_row
+        for col_idx in range(1, len(row) + 1):
+            cell = ws.cell(row=row_num, column=col_idx)
+            if col_idx in wrap_columns:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+            else:
+                cell.alignment = Alignment(vertical="top")
+
         # Color code priority
         priority = rec.get("Priority", "")
         if priority in priority_colors:
-            row_num = ws.max_row
             priority_cell = ws.cell(row=row_num, column=4)
-            priority_cell.fill = PatternFill(start_color=priority_colors[priority], 
-                                            end_color=priority_colors[priority], 
+            priority_cell.fill = PatternFill(start_color=priority_colors[priority],
+                                            end_color=priority_colors[priority],
                                             fill_type="solid")
     
     # Adjust column widths

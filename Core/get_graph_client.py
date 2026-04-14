@@ -3,6 +3,7 @@ from msgraph import GraphServiceClient
 import httpx
 import logging
 import os
+import subprocess
 
 # Suppress Azure SDK warnings
 logging.getLogger('azure.identity').setLevel(logging.ERROR)
@@ -162,3 +163,88 @@ async def get_api_client(service_name):
         },
         timeout=30.0
     )
+
+
+def ensure_a365_interactive_signin(tenant_id=None, silent=False):
+    """Trigger interactive delegated sign-in for A365 users.
+
+    This performs interactive AuthN via Connect-MgGraph (browser popup style)
+    and validates AuthZ by probing the Copilot admin catalog endpoint.
+
+    Args:
+        tenant_id: Azure tenant ID (optional)
+        silent: If True, suppress status output
+
+    Returns:
+        bool: True only if interactive sign-in succeeds and endpoint authorization is confirmed
+    """
+    from .spinner import get_timestamp
+
+    try:
+        if not silent:
+            print(f"[{get_timestamp()}] ℹ️  A365 requires interactive sign-in with an AI/Copilot admin user...")
+
+        # Always re-run interactive auth for A365 to avoid silent reuse of prior in-process status.
+        os.environ["A365_INTERACTIVE_AUTH"] = "0"
+
+        tenant = tenant_id or os.getenv('TENANT_ID')
+        if not tenant:
+            os.environ["A365_INTERACTIVE_AUTH"] = "0"
+            if not silent:
+                print(f"[{get_timestamp()}] ⚠️  TENANT_ID is required for A365 interactive sign-in")
+            return False
+
+        # Use PowerShell Graph interactive auth (popup experience, similar to Purview flow).
+        ps_command = (
+            "$ErrorActionPreference='Stop';"
+            "if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {"
+            "  Write-Host 'Microsoft.Graph PowerShell module is required for A365 interactive sign-in.' -ForegroundColor Yellow;"
+            "  Write-Host 'Install with: Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber' -ForegroundColor Cyan;"
+            "  exit 61"
+            "};"
+            "Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null;"
+            "Write-Host 'A365 sign-in required now. Complete device authentication in the browser within 120 seconds.' -ForegroundColor Yellow;"
+            "Write-Host 'If the browser prompt is hidden, bring it to front and finish sign-in.' -ForegroundColor Yellow;"
+            f"Connect-MgGraph -TenantId '{tenant}' -NoWelcome -ContextScope Process -UseDeviceAuthentication -Scopes 'User.Read','Directory.Read.All','CopilotPackages.Read.All' -ErrorAction Stop;"
+            "try {"
+            "  Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/copilot/admin/catalog/packages?$top=1' -ErrorAction Stop | Out-Null;"
+            "  exit 0"
+            "}"
+            "catch {"
+            "  if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {"
+            "    $code=[int]$_.Exception.Response.StatusCode;"
+            "    if ($code -eq 401) { exit 41 }"
+            "    elseif ($code -eq 403) { exit 43 }"
+            "    else { exit 50 }"
+            "  }"
+            "  else { exit 51 }"
+            "}"
+        )
+
+        result = subprocess.run(
+            ["pwsh", "-NoProfile", "-Command", ps_command],
+            text=True
+        )
+
+        if result.returncode == 0:
+            os.environ["A365_INTERACTIVE_AUTH"] = "1"
+            if not silent:
+                print(f"[{get_timestamp()}] ✅ A365 interactive sign-in and authorization successful")
+            return True
+
+        os.environ["A365_INTERACTIVE_AUTH"] = "0"
+        if not silent:
+            if result.returncode == 43:
+                print(f"[{get_timestamp()}] ⚠️  Signed-in user is not authorized for Copilot admin catalog endpoint (requires AI Admin/Copilot Admin or Global Admin).")
+            elif result.returncode == 41:
+                print(f"[{get_timestamp()}] ⚠️  Interactive sign-in succeeded, but token is unauthorized for Copilot admin endpoint.")
+            elif result.returncode == 61:
+                print(f"[{get_timestamp()}] ⚠️  Microsoft.Graph PowerShell module not found. Install it and retry.")
+            else:
+                print(f"[{get_timestamp()}] ⚠️  A365 interactive sign-in/auth probe failed via Graph PowerShell.")
+        return False
+    except Exception as e:
+        os.environ["A365_INTERACTIVE_AUTH"] = "0"
+        if not silent:
+            print(f"[{get_timestamp()}] ⚠️  A365 interactive sign-in failed: {e}")
+        return False
