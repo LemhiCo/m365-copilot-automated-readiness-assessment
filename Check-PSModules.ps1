@@ -47,6 +47,12 @@ function Test-RequiredModules {
                 @{Name = "Microsoft.Graph.Applications"; Install = "Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber"}
             )
         }
+        "A365" {
+            $modules = @(
+                @{Name = "Microsoft.Graph.Authentication"; Install = "Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber"}
+                @{Name = "Microsoft.Graph.Applications"; Install = "Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber"}
+            )
+        }
         "All" {
             $modules = @(
                 @{Name = "ExchangeOnlineManagement"; Install = "Install-Module ExchangeOnlineManagement -Scope CurrentUser"}
@@ -97,7 +103,7 @@ function Test-RequiredModules {
 if ($MyInvocation.InvocationName -ne '.') {
     param(
         [Parameter(Mandatory=$false)]
-        [ValidateSet("Purview", "PowerPlatform", "Setup", "All")]
+        [ValidateSet("Purview", "PowerPlatform", "Setup", "A365", "All")]
         [string]$ScriptType = "All"
     )
     

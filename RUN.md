@@ -8,6 +8,7 @@ Use the guidance below to run the Automated Readiness Assessment for Microsoft 3
 - **Admin Access**: Appropriate role assignments based on services to assess ([see table below](#minimum-admin-roles))
 - **Python Environment**: Python 3.8 or later installed
 - **Network Access**: Connectivity to Microsoft Graph, Defender, Power Platform, and Purview APIs
+- **A365 Prerequisites** (when selecting A365): Microsoft Graph PowerShell module installed and a user account authorized to access Copilot package catalog data.
 - **Repository Clone**: Local copy of this repository
 
 **Minimum Admin Roles:**
@@ -19,6 +20,7 @@ Use the guidance below to run the Automated Readiness Assessment for Microsoft 3
 | Defender Security Data | Security Reader | Service Principal |
 | Power Platform | Power Platform Administrator | User delegated |
 | Copilot Studio | Power Platform Administrator | User delegated |
+| A365 (Agent 365) | Copilot/AI administrator with Copilot package catalog read access | User delegated |
 | Purview Compliance | Compliance Administrator | User delegated |
 
 **Note:** It is recommended that Microsoft 365 Administrators run this assessment. Alternatively, assign the appropriate roles listed above to designated users who will perform the assessment.
@@ -26,6 +28,8 @@ Use the guidance below to run the Automated Readiness Assessment for Microsoft 3
 ## Data Collection Details
 
 The following table shows what data is collected for each service and the APIs/cmdlets used:
+
+Each selected service contributes observations and recommendations to the same consolidated report output.
 
 | Service | Authentication | APIs / PowerShell Cmdlets Used | Data Collected |
 |---------|----------------|--------------------------------|----------------|
@@ -35,6 +39,7 @@ The following table shows what data is collected for each service and the APIs/c
 | **Purview** | User delegated | **Connect-IPPSSession:**<br/>- `Get-DlpCompliancePolicy`<br/>- `Get-Label`, `Get-LabelPolicy`<br/>- `Get-RetentionCompliancePolicy`<br/>- `Get-InformationBarrierPolicy`<br/>- `Get-InsiderRiskPolicy`<br/>- `Get-ComplianceCase`<br/>**Connect-ExchangeOnline:**<br/>- `Get-OrganizationConfig`<br/>- `Get-AdminAuditLogConfig`<br/>- `Get-IRMConfiguration` | DLP policies, sensitivity labels, label policies, retention policies, information barriers, insider risk policies, compliance cases, audit configuration, IRM settings |
 | **Power Platform** | User delegated | Power Platform Management API:<br/>- `/providers/Microsoft.BusinessAppPlatform/scopes/admin/environments`<br/>- `/providers/Microsoft.PowerApps/apps`<br/>- `/providers/Microsoft.Flow/flows`<br/>- `/providers/Microsoft.PowerApps/aiModels` | Environments, environment DLP policies, Power Apps inventory, Power Automate flows, AI Builder models, connector usage |
 | **Copilot Studio** | User delegated | Power Platform Management API:<br/>- `/providers/Microsoft.BotService/botServices`<br/>- `/providers/Microsoft.Botframework/bots` | Copilot Studio agents, agent configurations, conversation analytics, authentication settings |
+| **A365 (Agent 365)** | User delegated | Microsoft Graph beta API:<br/>- `/beta/copilot/admin/catalog/packages`<br/>- `/beta/copilot/admin/catalog/packages/{id}`<br/>Optional: GitHub Copilot model API<br/>(auto-discovered from GitHub CLI or `GITHUB_TOKEN` env var) | Agent catalog inventory, agent metadata, supported hosts, element types, deployment/availability distributions, restricted access and adoption indicators; AI-enriched summaries and recommendations (auto-enabled if GitHub CLI is authenticated) |
 
 ## Deployment Steps
 
@@ -139,7 +144,7 @@ Override configuration using command-line arguments:
 # Specific services
 python main.py --services M365 Defender Entra
 
-# A365 switch recognition only (phase 1 scaffolding)
+# A365 readiness assessment
 python main.py --services A365
 
 # Services with spaces require double quotes
@@ -156,14 +161,14 @@ python main.py --tenant-id "contoso.onmicrosoft.com" --services
 
 **Configuration Examples:**
 
-- **Full Assessment**: `SERVICES = []` or `--services` (analyzes all six service areas)
+- **Full Assessment**: `SERVICES = []` or `--services` (analyzes all available service areas)
 - **Targeted Assessment**: `SERVICES = ["M365", "Defender", "Entra"]` or `--services M365 Defender Entra`
 - **Security Focus**: `SERVICES = ["Defender", "Entra"]` or `--services Defender Entra`
 - **Compliance Focus**: `SERVICES = ["Purview"]` or `--services Purview`
 - **Power Platform & Copilot**: `SERVICES = ["Power Platform", "Copilot Studio"]` or `--services "Power Platform" "Copilot Studio"`
-- **A365 switch recognition only**: `SERVICES = ["A365"]` or `--services A365`
+- **A365 only**: `SERVICES = ["A365"]` or `--services A365`
 
-**A365 Note:** In the current phase, `A365` is a recognized service switch only. Selecting it validates and loads the existing `Recommendations/a365` package scaffolding, but it does not yet perform Agent 365 data collection or generate A365 report output.
+**A365 Note:** Selecting `A365` runs delegated data gathering and processing for Agent 365 readiness. The tool performs interactive sign-in, retrieves agent catalog data, fetches available agent details, and writes A365 recommendations to the report.
 
 ### 4. Run the Assessment
 
@@ -177,6 +182,7 @@ python main.py --tenant-id "contoso.onmicrosoft.com" --services
 2. **Data Collection Progress**:
    - **M365, Entra, Defender**: Silent authentication via service principal
    - **Power Platform & Copilot Studio**: Web popup for user delegated authentication (if assessing these services)
+   - **A365**: Interactive Microsoft Graph sign-in (account picker or device code fallback) for Copilot agent catalog access
    - **Purview**: Web popup for Exchange Online PowerShell authentication (if assessing Purview)
    
    See [Data Collection Details](#data-collection-details) for specific APIs and cmdlets used per service.
@@ -190,6 +196,8 @@ python main.py --tenant-id "contoso.onmicrosoft.com" --services
    [2026-01-06 14:31:15] ✅ Power Platform: 3 environments analyzed
    [2026-01-06 14:31:20] 🔐 Purview: Exchange Online authentication required
    [2026-01-06 14:31:35] ✅ Purview: 12 DLP policies retrieved
+   [2026-01-06 14:31:42] 🔐 A365 sign-in required now. An account picker/browser prompt should open.
+   [2026-01-06 14:31:58] ✅ A365 catalog retrieved and detail processing started
    ```
 
 3. **Report Generation**:
@@ -201,6 +209,7 @@ python main.py --tenant-id "contoso.onmicrosoft.com" --services
 **Estimated Execution Time:**
 - M365 + Entra only: ~10-15 seconds
 - All services (without Power Platform/Purview): ~30-45 seconds
+- A365 only: ~30-90 seconds (depends on agent catalog size and detail endpoint availability)
 - Comprehensive (all services + PowerShell collectors): ~2-3 minutes
 
 ## Post-Execution Steps
@@ -218,7 +227,7 @@ Reports/m365_recommendations_20260106_143106.xlsx
 
 | Column | Description | Example Values |
 |--------|-------------|----------------|
-| Service | Service area assessed | M365, Entra, Defender, Purview, Power Platform, Copilot Studio |
+| Service | Service area assessed | M365, Entra, Defender, Purview, Power Platform, Copilot Studio, A365 |
 | Feature | Specific capability or control | Copilot in Apps, Conditional Access, Security Posture |
 | Status | Current state | Success, Disabled, Warning, PendingInput |
 | Priority | Implementation urgency | High, Medium, Low |
@@ -341,6 +350,29 @@ pip install -r requirements.txt
 - API throttling triggered - wait 60 seconds and retry
 - Reduce scope: Assess fewer services at once
 - For large tenants (>10,000 users): Run during off-peak hours
+
+### A365 Issues
+
+**Problem:** A365 flow reports Microsoft.Graph module is missing
+
+**Solution:**
+```powershell
+Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber
+```
+
+**Problem:** A365 sign-in popup is blocked or not visible
+
+**Solution:**
+- Complete sign-in in the browser prompt when it appears
+- If the popup fails, the tool falls back to device code authentication
+- Use https://microsoft.com/devicelogin to complete device code sign-in
+
+**Problem:** A365 returns authorization failures (401/403)
+
+**Solution:**
+- Verify you are signing in with an account that has Copilot package catalog read authorization
+- Confirm tenant context is correct in `TENANT_ID` or `--tenant-id`
+- Retry after re-authenticating to ensure fresh delegated consent
 
 ## Next Steps
 

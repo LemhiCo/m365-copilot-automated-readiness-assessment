@@ -2,15 +2,15 @@
 
 Microsoft 365 Copilot represents a transformative shift in workplace productivity through AI-powered assistance. This automated assessment tool helps organizations evaluate their readiness for deploying Microsoft 365 Copilot and AI agents by analyzing licensing, security posture, compliance configurations, and infrastructure across the M365 ecosystem.
 
-## Assessing Copilot Readiness
+## Assessing Copilot and Agent Readiness
 
-Determining whether your organization meets the prerequisites for Microsoft 365 Copilot deployment requires evaluating licensing, security controls, compliance policies, and infrastructure across multiple service areas. Traditional assessment approaches rely on manual questionnaires and subjective evaluation.
+Determining whether your organization meets the prerequisites for Microsoft 365 Copilot and Agent deployment requires evaluating licensing, security controls, compliance policies, and infrastructure across multiple service areas. Traditional assessment approaches rely on manual questionnaires and subjective evaluation.
 
 **Automated Readiness Assessment** provides an objective, data-driven alternative by retrieving data from Microsoft APIs to analyze your actual tenant configuration and generate actionable recommendations.
 
 ## Automated Readiness Assessment
 
-Automated Readiness Assessment is an evolution of manual evaluation processes. It uses a script-based approach to analyze current configurations across six M365 service areas. High-level workflow:
+Automated Readiness Assessment is an evolution of manual evaluation processes. It uses a script-based approach to analyze current configurations across seven M365 service areas. High-level workflow:
 
 ```mermaid
 graph LR
@@ -19,10 +19,12 @@ graph LR
     B --> D[Defender APIs<br/>Threats, Endpoints, Posture]
     B --> E[Exchange Online APIs<br/>Purview Compliance]
     B --> F[Power Platform APIs<br/>Environments, DLP, AI Builder]
+    B --> H[Copilot Admin APIs<br/>Agent Catalog, Agent Details]
     C --> G[Reports<br/>CSV & Excel]
     D --> G
     E --> G
     F --> G
+    H --> G
 ```
 
 Each component:
@@ -41,6 +43,7 @@ Each component:
   - **Purview**: Data classification, information governance, compliance boundaries
   - **Power Platform**: Environment governance, connector policies, AI Builder readiness
   - **Copilot Studio**: Agent licensing, custom agent deployment, conversation analytics
+  - **A365 (Agent 365)**: Agent catalog analysis, Agent detail sampling, host and element-type readiness signals
 
 Querying APIs enables precise evaluation of configuration status across these design areas:
 
@@ -50,12 +53,13 @@ Querying APIs enables precise evaluation of configuration status across these de
 - **Compliance Readiness**: DLP policy coverage, sensitivity label adoption, retention enforcement
 - **Power Platform Governance**: Environment-level DLP, connector classification, AI Builder model monitoring
 - **Copilot Studio**: Agent deployment readiness, authentication configurations, transcript retention
+- **A365 (Agent 365)**: Agent inventory and Agent metadata used for Agent 365 adoption and rollout recommendations
 
 There are multiple design area evaluations implemented in Automated Readiness Assessment, each producing observations and prioritized recommendations.
 
 ### Benefits
 
-**Time**: Assessment completes in seconds. Target specific services (e.g., only Defender + Purview) or run comprehensive analysis across all six implemented areas. No manual form-filling or lengthy questionnaires.
+**Time**: Assessment completes in seconds. Target specific services (e.g., only Defender + Purview) or run comprehensive analysis across all seven implemented areas. No manual form-filling or lengthy questionnaires.
 
 **Cost**: Open-source tool with no licensing fees. Leverages existing Microsoft 365 admin permissions - no third-party agents or data exports required.
 
@@ -69,10 +73,16 @@ There are multiple design area evaluations implemented in Automated Readiness As
 
 The assessment generates detailed reports in both CSV and Excel formats, providing a comprehensive view of your Microsoft 365 Copilot readiness across all evaluated service areas:
 
+### Agent 365 Readiness Report
+
+![Agent Readiness Assessment](Media/AgentReadinessAssessment.png)
+
+### M365 Copilot Readiness Report
+
 ![Assessment Report Output](Media/ReportOutput2.png)
 
 The report includes:
-- **Service Area**: M365, Entra, Defender, Purview, Power Platform, or Copilot Studio
+- **Service Area**: M365, Entra, Defender, Purview, Power Platform, Copilot Studio, or A365
 - **Feature**: Configuration domain (Licensing, Security, Compliance, Governance)
 - **Status**: Current state (Compliant, Warning, Not Configured)
 - **Priority**: Recommended action priority (High, Medium, Low)
@@ -84,10 +94,6 @@ Reports are timestamped (e.g., `m365_recommendations_20260106_143106.csv`) to tr
 ## Next Steps
 
 [Run Automated Readiness Assessment](RUN.md)
-
-## A365 Switch Status
-
-`A365` is now recognized as a valid service switch in the CLI and configuration flow. This phase only adds switch recognition and recommendation package scaffolding under `Recommendations/a365`; A365 data collection and report generation are not implemented yet.
 
 ## Video Tutorial
 
