@@ -39,6 +39,13 @@ async def orchestrate(tenant_id, services=None):
         # Load modules and analyze service plans
         await load_modules_and_analyze(tenant_id, service_config)
         
+        # PRE-FLIGHT: Ensure GitHub CLI is ready if A365 is selected
+        if run_a365:
+            from .a365.github_cli_setup import ensure_github_cli_ready
+            if not ensure_github_cli_ready():
+                print(f"\n[{get_timestamp()}] ❌ A365 service requires GitHub Copilot API access via GitHub CLI.")
+                return
+        
         # PRE-FLIGHT: Launch unified Power Platform/Copilot Studio data collector if needed
         if run_power_platform or run_copilot_studio:
             await collect_power_platform_data(tenant_id, run_power_platform, run_copilot_studio)
