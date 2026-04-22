@@ -34,7 +34,14 @@ def check_credentials():
     # Load .env file first
     load_env_file()
     
-    # Check required variables
+    # GDAP flow: only TENANT_ID required (tokens pre-obtained by worker)
+    if os.environ.get('GDAP_GRAPH_TOKEN'):
+        missing = []
+        if not os.environ.get('TENANT_ID'):
+            missing.append('TENANT_ID')
+        return missing
+
+    # SP flow: all three required
     missing = []
     if not os.environ.get('TENANT_ID'):
         missing.append('TENANT_ID')
@@ -42,7 +49,7 @@ def check_credentials():
         missing.append('CLIENT_ID')
     if not os.environ.get('CLIENT_SECRET'):
         missing.append('CLIENT_SECRET')
-    
+
     return missing
 
 

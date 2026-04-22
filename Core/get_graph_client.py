@@ -1,9 +1,20 @@
 from azure.identity import ClientSecretCredential
+from azure.core.credentials import AccessToken
 from msgraph import GraphServiceClient
 import httpx
 import logging
 import os
 import subprocess
+import time
+
+
+class StaticTokenCredential:
+    """Wraps a pre-obtained access token for use with Azure SDKs."""
+    def __init__(self, token: str):
+        self._token = token
+
+    def get_token(self, *args, **kwargs) -> AccessToken:
+        return AccessToken(self._token, int(time.time()) + 3600)
 
 # Suppress Azure SDK warnings
 logging.getLogger('azure.identity').setLevel(logging.ERROR)
@@ -47,9 +58,20 @@ async def get_graph_client(tenant_id=None, silent=False):
     
     # Get credentials from environment
     tenant_id = tenant_id or os.getenv('TENANT_ID')
+    gdap_graph_token = os.getenv('GDAP_GRAPH_TOKEN')
+
+    if gdap_graph_token:
+        if _credential is None:
+            _credential = StaticTokenCredential(gdap_graph_token)
+        _graph_client = GraphServiceClient(
+            credentials=_credential,
+            scopes=['https://graph.microsoft.com/.default']
+        )
+        return _graph_client
+
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    
+
     if not all([tenant_id, client_id, client_secret]):
         raise ValueError(
             "Missing required environment variables. Ensure .env file contains:\n"
@@ -58,27 +80,25 @@ async def get_graph_client(tenant_id=None, silent=False):
             "  CLIENT_SECRET=<your-client-secret>\n"
             "Run setup-service-principal.ps1 to create these credentials."
         )
-    
+
     from .spinner import get_timestamp
     if not silent:
         print(f"[{get_timestamp()}] ℹ️     Authenticating with service principal...")
         import sys
         sys.stdout.flush()
-    
-    # Create credential using service principal
+
     if _credential is None:
         _credential = ClientSecretCredential(
             tenant_id=tenant_id,
             client_id=client_id,
             client_secret=client_secret
         )
-    
-    # Create Graph client
+
     _graph_client = GraphServiceClient(
         credentials=_credential,
         scopes=['https://graph.microsoft.com/.default']
     )
-    
+
     if not silent:
         print(f"[{get_timestamp()}] ✅ Authenticated successfully")
         import sys
@@ -87,29 +107,33 @@ async def get_graph_client(tenant_id=None, silent=False):
 
 def get_shared_credential():
     """Get shared credential for non-Graph APIs (Defender, Power Platform)
-    
+
     Returns:
-        ClientSecretCredential instance
+        StaticTokenCredential if GDAP_GRAPH_TOKEN is set, else ClientSecretCredential
     """
     global _credential
-    
+
     if _credential is not None:
         return _credential
-    
-    # Get credentials from environment
+
+    gdap_graph_token = os.getenv('GDAP_GRAPH_TOKEN')
+    if gdap_graph_token:
+        _credential = StaticTokenCredential(gdap_graph_token)
+        return _credential
+
     tenant_id = os.getenv('TENANT_ID')
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    
+
     if not all([tenant_id, client_id, client_secret]):
         raise ValueError("Missing credentials in .env file. Run setup-service-principal.ps1 first.")
-    
+
     _credential = ClientSecretCredential(
         tenant_id=tenant_id,
         client_id=client_id,
         client_secret=client_secret
     )
-    
+
     return _credential
 
 def get_power_platform_credential():
@@ -149,15 +173,20 @@ async def get_api_client(service_name):
         raise ValueError(f"Unknown service: {service_name}. Valid: {list(service_config.keys())}")
     
     config = service_config[service_name]
-    
-    # Get token for the specific scope (synchronous call)
-    token = credential.get_token(config['scope'])
-    
-    # Create HTTP client with bearer token
+
+    if service_name == 'defender':
+        gdap_defender_token = os.getenv('GDAP_DEFENDER_TOKEN')
+        if gdap_defender_token:
+            bearer = gdap_defender_token
+        else:
+            bearer = credential.get_token(config['scope']).token
+    else:
+        bearer = credential.get_token(config['scope']).token
+
     return httpx.AsyncClient(
         base_url=config['base_url'],
         headers={
-            "Authorization": f"Bearer {token.token}",
+            "Authorization": f"Bearer {bearer}",
             "Accept": "application/json",
             "Content-Type": "application/json"
         },
