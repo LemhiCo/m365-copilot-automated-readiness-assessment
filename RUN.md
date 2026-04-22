@@ -7,6 +7,7 @@ Use the guidance below to run the Automated Readiness Assessment for Microsoft 3
 - **Microsoft 365 Tenant**: Active M365 tenant with licenses
 - **Admin Access**: Appropriate role assignments based on services to assess ([see table below](#minimum-admin-roles))
 - **Python Environment**: Python 3.8 or later installed
+- **PowerShell 7 (`pwsh`)**: Required for PowerShell-based data collection and interactive auth flows (Power Platform, Copilot Studio, Purview, and A365)
 - **Network Access**: Connectivity to Microsoft Graph, Defender, Power Platform, and Purview APIs
 - **A365 Prerequisites** (when selecting A365): Microsoft Graph PowerShell module installed and a user account authorized to access Copilot package catalog data.
 - **Repository Clone**: Local copy of this repository
