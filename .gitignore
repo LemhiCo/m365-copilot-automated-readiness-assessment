@@ -38,3 +38,6 @@ ENV/
 
 # Generated reports and exports
 Reports/
+
+# macOS
+.DS_Store
