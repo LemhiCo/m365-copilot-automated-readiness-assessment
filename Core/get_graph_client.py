@@ -9,12 +9,23 @@ import time
 
 
 class StaticTokenCredential:
-    """Wraps a pre-obtained access token for use with Azure SDKs."""
-    def __init__(self, token: str):
-        self._token = token
+    """Wraps pre-obtained access tokens for Azure SDKs, routing get_token() calls by scope.
 
-    def get_token(self, *args, **kwargs) -> AccessToken:
-        return AccessToken(self._token, int(time.time()) + 3600)
+    Pass scope_tokens to override the default token for specific audiences:
+      securitycenter.microsoft.com -> GDAP_MDE_TOKEN (MDE device/vuln data)
+      security.microsoft.com       -> GDAP_DEFENDER_TOKEN (MTP incidents/hunting)
+      (anything else)              -> default_token (Graph)
+    """
+    def __init__(self, default_token: str, scope_tokens: dict = None):
+        self._default = default_token
+        self._scope_tokens = scope_tokens or {}
+
+    def get_token(self, *scopes, **kwargs) -> AccessToken:
+        scope = scopes[0] if scopes else ""
+        for key, token in self._scope_tokens.items():
+            if key in scope and token:
+                return AccessToken(token, int(time.time()) + 3600)
+        return AccessToken(self._default, int(time.time()) + 3600)
 
 # Suppress Azure SDK warnings
 logging.getLogger('azure.identity').setLevel(logging.ERROR)
@@ -62,7 +73,13 @@ async def get_graph_client(tenant_id=None, silent=False):
 
     if gdap_graph_token:
         if _credential is None:
-            _credential = StaticTokenCredential(gdap_graph_token)
+            _credential = StaticTokenCredential(
+                default_token=gdap_graph_token,
+                scope_tokens={
+                    "securitycenter.microsoft.com": os.getenv("GDAP_MDE_TOKEN", ""),
+                    "security.microsoft.com": os.getenv("GDAP_DEFENDER_TOKEN", ""),
+                },
+            )
         _graph_client = GraphServiceClient(
             credentials=_credential,
             scopes=['https://graph.microsoft.com/.default']
@@ -118,7 +135,13 @@ def get_shared_credential():
 
     gdap_graph_token = os.getenv('GDAP_GRAPH_TOKEN')
     if gdap_graph_token:
-        _credential = StaticTokenCredential(gdap_graph_token)
+        _credential = StaticTokenCredential(
+            default_token=gdap_graph_token,
+            scope_tokens={
+                "securitycenter.microsoft.com": os.getenv("GDAP_MDE_TOKEN", ""),
+                "security.microsoft.com": os.getenv("GDAP_DEFENDER_TOKEN", ""),
+            },
+        )
         return _credential
 
     tenant_id = os.getenv('TENANT_ID')
