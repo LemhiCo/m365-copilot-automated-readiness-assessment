@@ -37,10 +37,15 @@ async def analyze_service_plans(tenant_id, services_to_run):
     start_time = time.time()
     sys.stdout.write(f"[{get_timestamp()}]   Analyzing Features      [{'░' * 20}]   0%")
     sys.stdout.flush()
-    
-    # Fetch subscription data
-    skus = await client.subscribed_skus.get()
-    
+
+    # Fetch subscription data — degrade gracefully if the token can't read SKUs
+    try:
+        skus = await client.subscribed_skus.get()
+    except Exception as e:
+        sys.stdout.write(f"\r[{get_timestamp()}]   ⚠️  Analyzing Features skipped — could not fetch subscribed SKUs: {str(e)[:120]}\n")
+        sys.stdout.flush()
+        return
+
     # Update to 50% after fetch completes
     elapsed = time.time() - start_time
     filled = int(20 * 0.5)
