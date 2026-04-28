@@ -61,13 +61,20 @@ try {
         # Not connected, will connect below
     }
     
-    # Connect only if not already connected
+    # Connect only if not already connected.
+    # IPPS failure is non-fatal — Connect-IPPSSession is unsupported on Linux PowerShell.
+    # DLP/label/retention data will be empty; EXO data (org config, IRM, audit) still collected.
     if (-not $ippsConnected) {
         Write-Progress "      → Connecting to Security & Compliance..." -NoNewline
-        Connect-IPPSSession -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
-        Write-Progress " ✓" -ForegroundColor Green
-        # Output to stderr so Python can display in real-time
-        [Console]::Error.WriteLine("AUTH_COMPLETE:Security & Compliance")
+        try {
+            Connect-IPPSSession -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
+            Write-Progress " ✓" -ForegroundColor Green
+            [Console]::Error.WriteLine("AUTH_COMPLETE:Security & Compliance")
+            $ippsConnected = $true
+        } catch {
+            Write-Progress " unavailable (skipped)" -ForegroundColor Yellow
+            [Console]::Error.WriteLine("IPPS_UNAVAILABLE: $($_.Exception.Message.Split([Environment]::NewLine)[0])")
+        }
     }
     
     if (-not $exoConnected) {
