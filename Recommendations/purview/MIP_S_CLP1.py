@@ -210,5 +210,4 @@ async def get_recommendation(sku_name, status="Success", client=None, purview_cl
     # Return all recommendations
     if deployment_recs:
         return [license_rec] + deployment_recs
-    
-    # If license not active or no data, return only license recommendation
+    return license_rec
