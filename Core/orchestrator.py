@@ -39,8 +39,8 @@ async def orchestrate(tenant_id, services=None):
         # Load modules and analyze service plans
         try:
             await load_modules_and_analyze(tenant_id, service_config)
-        except Exception as _e:
-            print(f"[{get_timestamp()}] ⚠️  Module loading failed — continuing with degraded coverage: {_e}")
+        except Exception as e:
+            print(f"[{get_timestamp()}] ⚠️  Module loading failed — continuing with degraded coverage: {e}")
         
         # PRE-FLIGHT: Ensure GitHub CLI is ready if A365 is selected
         if run_a365:
@@ -69,8 +69,8 @@ async def orchestrate(tenant_id, services=None):
             # pipelines each have their own guards and will return not_assessed.
             try:
                 client, services_and_licenses, has_license_data = await setup_graph_and_licenses(tenant_id, show_graph_messages)
-            except Exception as _e:
-                print(f"[{get_timestamp()}] ⚠️  Graph client setup failed — Graph-dependent services will be not_assessed: {_e}")
+            except Exception as e:
+                print(f"[{get_timestamp()}] ⚠️  Graph client setup failed — Graph-dependent services will be not_assessed: {e}")
         
         # Create service pipelines with shared context
         pipelines = create_pipelines(client, services_and_licenses, tenant_id, service_config)
