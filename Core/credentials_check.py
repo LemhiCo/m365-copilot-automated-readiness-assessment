@@ -8,14 +8,20 @@ import sys
 
 def load_env_file(base_path=None):
     """Load .env file if it exists.
-    
+
     Args:
         base_path: Base path to look for .env file. If None, uses parent of Core folder.
     """
-    if base_path is None:
-        base_path = os.path.dirname(os.path.dirname(__file__))
-    
-    env_path = os.path.join(base_path, '.env')
+    # SCAN_ENV_FILE allows the worker to provide an isolated per-scan env file
+    # so that concurrent scan jobs cannot stomp each other's credentials.
+    scan_env_file = os.environ.get('SCAN_ENV_FILE')
+    if scan_env_file:
+        env_path = scan_env_file
+    else:
+        if base_path is None:
+            base_path = os.path.dirname(os.path.dirname(__file__))
+        env_path = os.path.join(base_path, '.env')
+
     if os.path.exists(env_path):
         with open(env_path, 'r') as f:
             for line in f:

@@ -7,20 +7,29 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+
+def _reports_dir() -> Path:
+    """Return the reports output directory.
+
+    SCAN_REPORTS_DIR allows the worker to redirect output to an isolated
+    per-scan temp directory so that concurrent jobs cannot read each other's CSV.
+    Falls back to a relative 'Reports/' path (original behaviour).
+    """
+    return Path(os.environ.get('SCAN_REPORTS_DIR', 'Reports'))
+
 def export_to_csv(recommendations, filename=None):
     """
     Export recommendations to CSV file
-    
+
     Args:
         recommendations: List of recommendation dictionaries
         filename: Output filename (optional, generates timestamp-based name if not provided)
-    
+
     Returns:
         str: Path to created CSV file
     """
-    # Create Reports folder if it doesn't exist
-    recommendations_dir = Path("Reports")
-    recommendations_dir.mkdir(exist_ok=True)
+    recommendations_dir = _reports_dir()
+    recommendations_dir.mkdir(parents=True, exist_ok=True)
     
     if not filename:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -49,17 +58,16 @@ def export_to_csv(recommendations, filename=None):
 def export_to_json(recommendations, filename=None):
     """
     Export recommendations to JSON file
-    
+
     Args:
         recommendations: List of recommendation dictionaries
         filename: Output filename (optional, generates timestamp-based name if not provided)
-    
+
     Returns:
         str: Path to created JSON file
     """
-    # Create Reports folder if it doesn't exist
-    recommendations_dir = Path("Reports")
-    recommendations_dir.mkdir(exist_ok=True)
+    recommendations_dir = _reports_dir()
+    recommendations_dir.mkdir(parents=True, exist_ok=True)
     
     if not filename:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -85,11 +93,11 @@ def export_to_excel(recommendations, filename=None):
     """
     Export recommendations to Excel file
     Requires openpyxl: pip install openpyxl
-    
+
     Args:
         recommendations: List of recommendation dictionaries
         filename: Output filename (optional, generates timestamp-based name if not provided)
-    
+
     Returns:
         str: Path to created Excel file
     """
@@ -100,10 +108,9 @@ def export_to_excel(recommendations, filename=None):
         print("Warning: openpyxl not installed. Install it with: pip install openpyxl")
         print("Falling back to CSV export...")
         return export_to_csv(recommendations, filename)
-    
-    # Create Reports folder if it doesn't exist
-    recommendations_dir = Path("Reports")
-    recommendations_dir.mkdir(exist_ok=True)
+
+    recommendations_dir = _reports_dir()
+    recommendations_dir.mkdir(parents=True, exist_ok=True)
     
     if not filename:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

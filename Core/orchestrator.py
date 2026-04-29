@@ -37,7 +37,10 @@ async def orchestrate(tenant_id, services=None):
         run_a365 = service_config['run_a365']
         
         # Load modules and analyze service plans
-        await load_modules_and_analyze(tenant_id, service_config)
+        try:
+            await load_modules_and_analyze(tenant_id, service_config)
+        except Exception as _e:
+            print(f"[{get_timestamp()}] ⚠️  Module loading failed — continuing with degraded coverage: {_e}")
         
         # PRE-FLIGHT: Ensure GitHub CLI is ready if A365 is selected
         if run_a365:
@@ -54,17 +57,20 @@ async def orchestrate(tenant_id, services=None):
         # Mixed runs (e.g., M365 + A365) keep existing SP behavior.
         requires_sp_context = run_all or run_m365 or run_entra or run_defender or run_purview or run_power_platform or run_copilot_studio
 
+        client = None
+        services_and_licenses = None
         if requires_sp_context:
             # Check if we need Graph client messages (only for Graph-based services)
             # PowerShell-based services still need client for licenses, but silently
             graph_services = ['m365', 'entra', 'defender', 'copilot_studio']
             show_graph_messages = run_all or any(s.lower() in graph_services for s in service_config['services'])
 
-            # Initialize Graph client and licenses
-            client, services_and_licenses, has_license_data = await setup_graph_and_licenses(tenant_id, show_graph_messages)
-        else:
-            client = None
-            services_and_licenses = None
+            # Initialize Graph client and licenses — failure is non-fatal; Graph-dependent
+            # pipelines each have their own guards and will return not_assessed.
+            try:
+                client, services_and_licenses, has_license_data = await setup_graph_and_licenses(tenant_id, show_graph_messages)
+            except Exception as _e:
+                print(f"[{get_timestamp()}] ⚠️  Graph client setup failed — Graph-dependent services will be not_assessed: {_e}")
         
         # Create service pipelines with shared context
         pipelines = create_pipelines(client, services_and_licenses, tenant_id, service_config)
