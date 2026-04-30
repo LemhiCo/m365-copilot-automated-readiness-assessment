@@ -113,31 +113,47 @@ async def get_purview_client(tenant_id):
         dlp_data = labels_data = retention_data = label_policies_data = []
         insider_risk_data = comm_comp_data = ib_data = ediscovery_data = []
         org_config_data = irm_config_data = audit_config_data = {}
+
+    # Determine whether each IPPS cmdlet actually ran successfully.
+    # collect_purview_data.ps1 sets permission_denied=true on cmdlet failure; absence of
+    # the key means the cmdlet never ran. An empty list is a valid result (0 policies
+    # configured) — using list truthiness here would misreport available=False for tenants
+    # that have IPPS connected but no policies/labels deployed yet (LEM-407).
+    def ipps_collected(key):
+        if not purview_data or key not in purview_data:
+            return False
+        raw = purview_data[key]
+        return isinstance(raw, dict) and not raw.get('permission_denied', False)
+
+    dlp_collected = ipps_collected('dlp_policies')
+    labels_collected = ipps_collected('sensitivity_labels')
+    label_policies_collected = ipps_collected('label_policies')
+    retention_collected = ipps_collected('retention_policies')
     
     # Fetch data from all endpoints in parallel
     async def fetch_retention_labels():
-        if retention_data:
+        if retention_collected:
             return {
-                'available': True, 
-                'total_labels': len(retention_data) if isinstance(retention_data, list) else 0,
+                'available': True,
+                'total_labels': len(retention_data),
                 'labels': retention_data
             }
         return {'available': False, 'total_labels': 0}
-    
+
     async def fetch_sensitivity_labels():
-        if labels_data:
+        if labels_collected:
             return {
                 'available': True,
-                'total_labels': len(labels_data) if isinstance(labels_data, list) else 0,
+                'total_labels': len(labels_data),
                 'labels': labels_data
             }
         return {'available': False, 'total_labels': 0}
-    
+
     async def fetch_label_policies():
-        if label_policies_data:
+        if label_policies_collected:
             return {
                 'available': True,
-                'total_policies': len(label_policies_data) if isinstance(label_policies_data, list) else 0,
+                'total_policies': len(label_policies_data),
                 'policies': label_policies_data
             }
         return {'available': False, 'total_policies': 0}
@@ -169,7 +185,7 @@ async def get_purview_client(tenant_id):
         return {'available': False, 'total_cases': 0, 'active_cases': 0}
     
     async def fetch_dlp_policies():
-        if dlp_data:
+        if dlp_collected:
             enabled_count = sum(1 for p in dlp_data if p.get('Enabled'))
             return {
                 'available': True,
