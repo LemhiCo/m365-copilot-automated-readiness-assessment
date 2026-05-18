@@ -475,46 +475,52 @@ def extract_m365_insights_from_client(m365_client):
     if not m365_client or not m365_client.available:
         return {
             'available': False,
-            
+
             # Sites & SharePoint
             'total_sites': 0,
+            'sharepoint_report_available': False,
             'sharepoint_active_sites': 0,
             'sharepoint_total_files': 0,
+            'sharepoint_total_sites': 0,
+            'sharepoint_page_views': 0,
             'sharepoint_activity_rate': 0,
-            
+
             # Users & Licensing
             'total_users': 0,
             'enabled_users': 0,
             'copilot_licensed_users': 0,
             'copilot_adoption_rate': 0,
-            
+
             # Email Activity
             'email_active_users': 0,
             'email_avg_sent_per_user': 0,
             'email_avg_received_per_user': 0,
-            
+
             # Teams Activity
             'teams_active_users': 0,
             'teams_total_meetings': 0,
             'teams_avg_meetings_per_user': 0,
             'teams_avg_messages_per_user': 0,
-            
+            'teams_total_messages': 0,
+
             # OneDrive Usage
             'onedrive_total_accounts': 0,
             'onedrive_active_accounts': 0,
             'onedrive_adoption_rate': 0,
             'onedrive_storage_gb': 0,
-            
+
             # Office Activations
             'activations_total_users': 0,
             'activations_desktop_rate': 0,
-            
+
             # Active Users (Latest Snapshot)
             'office365_active_users': 0,
             'exchange_active_users': 0,
             'teams_active_users_snapshot': 0,
             'sharepoint_active_users': 0,
-            'onedrive_active_users': 0
+            'onedrive_active_users': 0,
+            'total_active_users': 0,
+            'office_active_users': 0,
         }
     
     # Extract from pre-computed summaries
@@ -537,7 +543,9 @@ def extract_m365_insights_from_client(m365_client):
         'sharepoint_report_period': sharepoint_summary.get('report_period', 'D30'),
         'sharepoint_active_sites': sharepoint_summary.get('active_sites', 0),
         'sharepoint_total_files': sharepoint_summary.get('total_files', 0),
+        'sharepoint_total_sites': sharepoint_summary.get('sites_in_report', 0),
         'sharepoint_total_page_views': sharepoint_summary.get('total_page_views', 0),
+        'sharepoint_page_views': sharepoint_summary.get('total_page_views', 0),
         'sharepoint_activity_rate': sharepoint_summary.get('site_activity_rate', 0),
         'sharepoint_avg_files_per_site': sharepoint_summary.get('avg_files_per_site', 0),
         
@@ -567,6 +575,10 @@ def extract_m365_insights_from_client(m365_client):
         'teams_total_calls': teams_summary.get('total_calls', 0),
         'teams_total_team_chat_messages': teams_summary.get('total_team_chat_messages', 0),
         'teams_total_private_messages': teams_summary.get('total_private_messages', 0),
+        'teams_total_messages': (
+            teams_summary.get('total_team_chat_messages', 0)
+            + teams_summary.get('total_private_messages', 0)
+        ),
         'teams_avg_meetings_per_user': teams_summary.get('avg_meetings_per_user', 0),
         'teams_avg_messages_per_user': teams_summary.get('avg_messages_per_user', 0),
         
@@ -597,6 +609,8 @@ def extract_m365_insights_from_client(m365_client):
         'sharepoint_active_users': active_users_summary.get('sharepoint_active', 0),
         'onedrive_active_users': active_users_summary.get('onedrive_active', 0),
         'yammer_active_users': active_users_summary.get('yammer_active', 0),
+        'total_active_users': active_users_summary.get('office_365_active', 0),
+        'office_active_users': active_users_summary.get('office_365_active', 0),
         
         # Missing Permissions (for recommendations to flag setup issues)
         'missing_permissions': getattr(m365_client, 'missing_permissions', [])

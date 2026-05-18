@@ -3,76 +3,28 @@ SharePoint (Plan 2) - M365 Copilot & Agent Adoption Recommendation
 """
 from Core.new_recommendation import new_recommendation
 from Core.friendly_names import get_friendly_sku_name
-from azure.core.exceptions import HttpResponseError
-
-async def get_deployment_status(client):
-    """
-    Check SharePoint deployment and usage for Copilot readiness.
-    
-    API: GET /sites?$select=id,webUrl,displayName,createdDateTime&$top=999
-    Permission: Sites.Read.All
-    
-    Checks:
-    - Number of SharePoint sites deployed
-    - Content availability for Copilot to index
-    
-    Args:
-        client: Microsoft Graph client
-        
-    Returns:
-        dict with deployment information or None if check fails
-    """
-    try:
-        sites = await client.sites.get()
-        
-        site_list = []
-        if sites and sites.value:
-            for site in sites.value:
-                site_list.append({
-                    'id': site.id,
-                    'name': site.display_name or 'Unknown',
-                    'url': site.web_url if hasattr(site, 'web_url') else '',
-                })
-        
-        return {
-            'available': True,
-            'sites': site_list,
-            'total_sites': len(site_list)
-        }
-    except HttpResponseError as e:
-        if e.status_code == 401:
-            return {'available': False, 'reason': 'Authentication failed (requires Sites.Read.All permission)'}
-        if e.status_code == 403:
-            return {'available': False, 'reason': 'Permission denied (requires Sites.Read.All permission)'}
-        return {'available': False, 'reason': f'API error {e.status_code}'}
-    except Exception as e:
-        error_type = type(e).__name__
-        return {'available': False, 'reason': f'{error_type}: Insufficient permissions'}
 
 async def get_recommendation(sku_name, status="Success", client=None, m365_insights=None):
     """
     SharePoint Plan 2 provides the collaborative content platform that Copilot
     uses to find, summarize, and generate insights from organizational knowledge.
-    
+
     Returns 2-3 recommendations:
     1. License status (active/inactive)
     2. Deployment status (sites deployed, content volume assessment)
-    3. Activity insights (if m365_insights available) - NEW
-    
+    3. Activity insights (if m365_insights available)
+
     Args:
         sku_name: SKU name where feature is found
         status: Provisioning status
-        client: Optional Graph client for deployment check
+        client: Optional Graph client (unused — kept for signature compatibility)
         m365_insights: Optional pre-computed M365 usage metrics
-    
-    Returns:
-        list: Recommendation dicts
     """
     feature_name = "SharePoint (Plan 2)"
     friendly_sku = get_friendly_sku_name(sku_name)
     recommendations = []
-    
-    # RECOMMENDATION 1: License Status (EXISTING - unchanged)
+
+    # RECOMMENDATION 1: License Status
     if status == "Success":
         recommendations.append(new_recommendation(
             service="M365",
@@ -94,34 +46,25 @@ async def get_recommendation(sku_name, status="Success", client=None, m365_insig
             priority="High",
             status=status
         ))
-    
+
     # RECOMMENDATION 2: Deployment Check (only if license is active)
     if status == "Success":
-        deployment_data = None
-        if client:
-            deployment_data = await get_deployment_status(client)
-        
-        if deployment_data and deployment_data.get('available'):
-            site_count = deployment_data.get('total_sites', 0)
-            
+        report_available = m365_insights and m365_insights.get('sharepoint_report_available')
+
+        if report_available:
+            site_count = m365_insights.get('sharepoint_total_sites', 0)
+
             if site_count > 10:
-                # GOOD: Substantial SharePoint deployment
-                sample_sites = [s['name'] for s in deployment_data.get('sites', [])[:3]]
-                sites_summary = ', '.join(sample_sites)
-                if site_count > 3:
-                    sites_summary += f" (and {site_count - 3} more)"
-                
                 recommendations.append(new_recommendation(
                     service="M365",
                     feature="SharePoint Content Deployment",
-                    observation=f"{site_count} SharePoint site(s) deployed with content available for Copilot: {sites_summary}",
+                    observation=f"{site_count} SharePoint site(s) deployed with content available for Copilot",
                     recommendation="",
                     link_text="SharePoint Admin Center",
                     link_url="https://admin.microsoft.com/sharepoint",
                     status="Success"
                 ))
             elif site_count > 0:
-                # MODERATE: Some sites but limited content
                 recommendations.append(new_recommendation(
                     service="M365",
                     feature="SharePoint Content Deployment",
@@ -133,7 +76,6 @@ async def get_recommendation(sku_name, status="Success", client=None, m365_insig
                     status="Warning"
                 ))
             else:
-                # CRITICAL GAP: License but no content
                 recommendations.append(new_recommendation(
                     service="M365",
                     feature="SharePoint Content Deployment",
@@ -144,20 +86,7 @@ async def get_recommendation(sku_name, status="Success", client=None, m365_insig
                     priority="High",
                     status="Warning"
                 ))
-        elif deployment_data and not deployment_data.get('available'):
-            # Could not verify - show actionable guidance
-            recommendations.append(new_recommendation(
-                service="M365",
-                feature="SharePoint Content Deployment",
-                observation=f"SharePoint license is active in {friendly_sku}. Content deployment status requires manual verification.",
-                recommendation=f"Verify SharePoint sites are deployed and contain content for Copilot. SharePoint is Copilot's primary knowledge source - policies, procedures, project docs, and institutional knowledge. Assess content volume, encourage teams to migrate file shares to SharePoint, and ensure critical business information is centralized. More content = better Copilot responses.",
-                link_text="SharePoint Admin Center",
-                link_url="https://admin.microsoft.com/sharepoint",
-                priority="Medium",
-                status="PendingInput"
-            ))
         else:
-            # No client provided - show actionable guidance
             recommendations.append(new_recommendation(
                 service="M365",
                 feature="SharePoint Content Deployment",
@@ -168,28 +97,25 @@ async def get_recommendation(sku_name, status="Success", client=None, m365_insig
                 priority="Medium",
                 status="PendingInput"
             ))
-    
-    # NEW: RECOMMENDATION 3 - Activity Insights (if m365_insights available)
+
+    # RECOMMENDATION 3: Activity Insights (if m365_insights available)
     if status == "Success" and m365_insights and m365_insights.get('sharepoint_report_available'):
         active_sites = m365_insights.get('sharepoint_active_sites', 0)
         total_files = m365_insights.get('sharepoint_total_files', 0)
         total_page_views = m365_insights.get('sharepoint_total_page_views', 0)
         activity_rate = m365_insights.get('sharepoint_activity_rate', 0)
-        
 
         if activity_rate >= 50 and total_files > 1000:
-            # HIGH ENGAGEMENT - Good for Copilot
             recommendations.append(new_recommendation(
                 service="M365",
                 feature=f"{feature_name} - Usage Activity",
                 observation=f"Strong SharePoint engagement: {active_sites} active sites with {total_files:,} files and {activity_rate}% activity rate. Rich content foundation ready for Copilot",
-                recommendation="",  # No recommendation - this is HELPFUL for adoption
+                recommendation="",
                 link_text="SharePoint Activity Reports",
                 link_url="https://learn.microsoft.com/microsoft-365/admin/activity-reports/sharepoint-site-usage",
                 status="Success"
             ))
         elif activity_rate >= 25:
-            # MODERATE ENGAGEMENT - Room for improvement
             recommendations.append(new_recommendation(
                 service="M365",
                 feature=f"{feature_name} - Usage Activity",
@@ -201,7 +127,6 @@ async def get_recommendation(sku_name, status="Success", client=None, m365_insig
                 status="Success"
             ))
         else:
-            # LOW ENGAGEMENT - Action needed
             recommendations.append(new_recommendation(
                 service="M365",
                 feature=f"{feature_name} - Usage Activity",
