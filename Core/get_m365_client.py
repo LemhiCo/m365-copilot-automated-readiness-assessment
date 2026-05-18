@@ -133,12 +133,16 @@ async def get_m365_client(graph_client):
         # asyncio.gather(return_exceptions=True) swallows exceptions into the result list, and
         # downstream code coerces missing data to zeros — without these lines, a failing report
         # is indistinguishable from a tenant with no activity.
+        # Route to sys.stderr: worker.py invokes this scan tool with subprocess capture_output=True,
+        # so stdout is silently dropped on exit 0 — only stderr is forwarded to worker logs.
+        # Same pattern as the LEM-373 degraded-coverage warning routing.
         with _stdout_lock:
             for task_name, result in response_dict.items():
                 if isinstance(result, Exception):
                     print(
                         f"[{get_timestamp()}] [WARNING] M365 report '{task_name}' failed: "
-                        f"{type(result).__name__}: {str(result)[:300]}"
+                        f"{type(result).__name__}: {str(result)[:300]}",
+                        file=sys.stderr,
                     )
                 else:
                     size_hint = ""
@@ -146,7 +150,10 @@ async def get_m365_client(graph_client):
                         size_hint = f" ({len(result.value)} items)"
                     elif isinstance(result, (bytes, bytearray)):
                         size_hint = f" ({len(result)} bytes)"
-                    print(f"[{get_timestamp()}] [INFO] M365 report '{task_name}' ok{size_hint}")
+                    print(
+                        f"[{get_timestamp()}] [INFO] M365 report '{task_name}' ok{size_hint}",
+                        file=sys.stderr,
+                    )
 
         # Process Sites data
         sites_response = response_dict.get('sites')
