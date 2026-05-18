@@ -128,7 +128,26 @@ async def get_m365_client(graph_client):
         
         # Map results to named dictionary
         response_dict = dict(zip(tasks.keys(), results))
-        
+
+        # Log per-task gather results so operators can diagnose silent failures.
+        # asyncio.gather(return_exceptions=True) swallows exceptions into the result list, and
+        # downstream code coerces missing data to zeros — without these lines, a failing report
+        # is indistinguishable from a tenant with no activity.
+        with _stdout_lock:
+            for task_name, result in response_dict.items():
+                if isinstance(result, Exception):
+                    print(
+                        f"[{get_timestamp()}] [WARNING] M365 report '{task_name}' failed: "
+                        f"{type(result).__name__}: {str(result)[:300]}"
+                    )
+                else:
+                    size_hint = ""
+                    if hasattr(result, 'value') and result.value is not None:
+                        size_hint = f" ({len(result.value)} items)"
+                    elif isinstance(result, (bytes, bytearray)):
+                        size_hint = f" ({len(result)} bytes)"
+                    print(f"[{get_timestamp()}] [INFO] M365 report '{task_name}' ok{size_hint}")
+
         # Process Sites data
         sites_response = response_dict.get('sites')
         if not isinstance(sites_response, Exception) and sites_response:
