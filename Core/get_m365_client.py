@@ -93,7 +93,7 @@ async def get_m365_client(graph_client):
             'sharepoint_usage': graph_client.reports.get_share_point_site_usage_detail_with_period(period=report_period).get(),
             'onedrive_usage': graph_client.reports.get_one_drive_usage_account_detail_with_period(period=report_period).get(),
             'office_activations': graph_client.reports.get_office365_activations_user_detail.get(),
-            'active_users': graph_client.reports.get_office365_active_user_detail_with_period(period=report_period).get()
+            'active_users': graph_client.reports.get_office365_active_user_counts_with_period(period=report_period).get()
         }
         
         # Execute all API calls in parallel with progress bar
@@ -419,7 +419,7 @@ async def get_m365_client(graph_client):
                         'exchange_active': int(latest_row.get('Exchange', 0) or 0),
                         'onedrive_active': int(latest_row.get('OneDrive', 0) or 0),
                         'sharepoint_active': int(latest_row.get('SharePoint', 0) or 0),
-                        'teams_active': int(latest_row.get('Microsoft Teams', 0) or 0),
+                        'teams_active': int(latest_row.get('Teams', 0) or 0),
                         'yammer_active': int(latest_row.get('Yammer', 0) or 0)
                     }
                 else:

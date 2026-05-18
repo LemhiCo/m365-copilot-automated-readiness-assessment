@@ -8,6 +8,10 @@ from Core.get_m365_client import extract_m365_insights_from_client
 
 
 class FakeM365Client:
+    # active_users_summary['office_365_active'] is populated from getOffice365ActiveUserCounts
+    # (the Counts report), NOT getOffice365ActiveUserDetail (the per-user Detail report).
+    # The Detail report has no 'Office 365'/'Exchange'/'SharePoint' count columns — using it
+    # silently produces all-zero counts. See Core/get_m365_client.py and LEM-513.
     available = True
 
     def __init__(self, sharepoint_summary=None, active_users_summary=None, teams_summary=None):
