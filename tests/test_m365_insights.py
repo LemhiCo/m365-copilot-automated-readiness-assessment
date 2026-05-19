@@ -4,7 +4,7 @@ Tests for extract_m365_insights_from_client.
 Run: cd m365-copilot-automated-readiness-assessment && python -m pytest tests/ -v
 """
 import pytest
-from Core.get_m365_client import extract_m365_insights_from_client
+from Core.get_m365_client import extract_m365_insights_from_client, col_max
 
 
 class FakeM365Client:
@@ -87,3 +87,33 @@ def test_fallback_branch_emits_previously_phantom_keys_as_zero():
 def test_fallback_branch_emits_sharepoint_report_available_false():
     insights = extract_m365_insights_from_client(None)
     assert insights['sharepoint_report_available'] is False
+
+
+def test_col_max_uses_period_peak_not_latest_row():
+    # Regression guard for LEM-566: 30-day CSV where the last row is all zeros
+    # (weekend/holiday dip), but earlier rows have real activity.
+    rows = [
+        {'Office 365': '17', 'Exchange': '12', 'OneDrive': '8',
+         'SharePoint': '5', 'Teams': '10', 'Yammer': '3'},
+        {'Office 365': '15', 'Exchange': '11', 'OneDrive': '7',
+         'SharePoint': '4', 'Teams': '9', 'Yammer': '2'},
+        {'Office 365': '0', 'Exchange': '0', 'OneDrive': '0',
+         'SharePoint': '0', 'Teams': '0', 'Yammer': '0'},  # latest row — all zeros
+    ]
+
+    assert col_max(rows, 'Office 365') == 17, "must return period peak, not latest-row 0"
+    assert col_max(rows, 'Exchange') == 12
+    assert col_max(rows, 'OneDrive') == 8
+    assert col_max(rows, 'SharePoint') == 5
+    assert col_max(rows, 'Teams') == 10
+    assert col_max(rows, 'Yammer') == 3
+
+
+def test_col_max_handles_empty_and_missing_values():
+    rows = [
+        {'Office 365': '', 'Exchange': None},
+        {'Office 365': '5'},
+    ]
+    assert col_max(rows, 'Office 365') == 5
+    assert col_max(rows, 'Exchange') == 0
+    assert col_max([], 'Office 365') == 0  # empty rows → default 0

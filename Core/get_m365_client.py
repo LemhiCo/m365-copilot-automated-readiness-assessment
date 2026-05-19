@@ -11,6 +11,12 @@ from azure.core.exceptions import HttpResponseError
 from .spinner import get_timestamp, _stdout_lock
 from datetime import datetime, timedelta
 
+def col_max(rows, col):
+    # Peak active users across the 30-day period — single-day sampling is volatile
+    # (frequently 0 on weekends/holidays for low-activity tenants). LEM-566.
+    return max((int(r.get(col, 0) or 0) for r in rows), default=0)
+
+
 async def get_m365_client(graph_client):
     """
     Get M365 usage analytics and deployment data from Microsoft Graph.
@@ -408,22 +414,17 @@ async def get_m365_client(graph_client):
             
             if parsed_rows:
                 client.available = True
-                # Extract latest row (most recent date) for current snapshot
-                if parsed_rows:
-                    latest_row = parsed_rows[-1]  # CSV is sorted by date, last row is most recent
-                    
-                    client.active_users_summary = {
-                        'available': True,
-                        'report_period': report_period,
-                        'office_365_active': int(latest_row.get('Office 365', 0) or 0),
-                        'exchange_active': int(latest_row.get('Exchange', 0) or 0),
-                        'onedrive_active': int(latest_row.get('OneDrive', 0) or 0),
-                        'sharepoint_active': int(latest_row.get('SharePoint', 0) or 0),
-                        'teams_active': int(latest_row.get('Teams', 0) or 0),
-                        'yammer_active': int(latest_row.get('Yammer', 0) or 0)
-                    }
-                else:
-                    client.active_users_summary = {'available': False, 'error': 'No rows in report'}
+
+                client.active_users_summary = {
+                    'available': True,
+                    'report_period': report_period,
+                    'office_365_active': col_max(parsed_rows, 'Office 365'),
+                    'exchange_active':   col_max(parsed_rows, 'Exchange'),
+                    'onedrive_active':   col_max(parsed_rows, 'OneDrive'),
+                    'sharepoint_active': col_max(parsed_rows, 'SharePoint'),
+                    'teams_active':      col_max(parsed_rows, 'Teams'),
+                    'yammer_active':     col_max(parsed_rows, 'Yammer'),
+                }
             else:
                 client.active_users_summary = {'available': False, 'error': 'No data in report'}
         else:
