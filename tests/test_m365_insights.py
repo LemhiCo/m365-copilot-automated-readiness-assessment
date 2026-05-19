@@ -4,7 +4,7 @@ Tests for extract_m365_insights_from_client.
 Run: cd m365-copilot-automated-readiness-assessment && python -m pytest tests/ -v
 """
 import pytest
-from Core.get_m365_client import extract_m365_insights_from_client, _col_max
+from Core.get_m365_client import extract_m365_insights_from_client, col_max
 
 
 class FakeM365Client:
@@ -101,12 +101,12 @@ def test_col_max_uses_period_peak_not_latest_row():
          'SharePoint': '0', 'Teams': '0', 'Yammer': '0'},  # latest row — all zeros
     ]
 
-    assert _col_max(rows, 'Office 365') == 17, "must return period peak, not latest-row 0"
-    assert _col_max(rows, 'Exchange') == 12
-    assert _col_max(rows, 'OneDrive') == 8
-    assert _col_max(rows, 'SharePoint') == 5
-    assert _col_max(rows, 'Teams') == 10
-    assert _col_max(rows, 'Yammer') == 3
+    assert col_max(rows, 'Office 365') == 17, "must return period peak, not latest-row 0"
+    assert col_max(rows, 'Exchange') == 12
+    assert col_max(rows, 'OneDrive') == 8
+    assert col_max(rows, 'SharePoint') == 5
+    assert col_max(rows, 'Teams') == 10
+    assert col_max(rows, 'Yammer') == 3
 
 
 def test_col_max_handles_empty_and_missing_values():
@@ -114,6 +114,6 @@ def test_col_max_handles_empty_and_missing_values():
         {'Office 365': '', 'Exchange': None},
         {'Office 365': '5'},
     ]
-    assert _col_max(rows, 'Office 365') == 5
-    assert _col_max(rows, 'Exchange') == 0
-    assert _col_max([], 'Office 365') == 0  # empty rows → default 0
+    assert col_max(rows, 'Office 365') == 5
+    assert col_max(rows, 'Exchange') == 0
+    assert col_max([], 'Office 365') == 0  # empty rows → default 0

@@ -11,7 +11,7 @@ from azure.core.exceptions import HttpResponseError
 from .spinner import get_timestamp, _stdout_lock
 from datetime import datetime, timedelta
 
-def _col_max(rows, col):
+def col_max(rows, col):
     # Peak active users across the 30-day period — single-day sampling is volatile
     # (frequently 0 on weekends/holidays for low-activity tenants). LEM-566.
     return max((int(r.get(col, 0) or 0) for r in rows), default=0)
@@ -418,12 +418,12 @@ async def get_m365_client(graph_client):
                 client.active_users_summary = {
                     'available': True,
                     'report_period': report_period,
-                    'office_365_active': _col_max(parsed_rows, 'Office 365'),
-                    'exchange_active':   _col_max(parsed_rows, 'Exchange'),
-                    'onedrive_active':   _col_max(parsed_rows, 'OneDrive'),
-                    'sharepoint_active': _col_max(parsed_rows, 'SharePoint'),
-                    'teams_active':      _col_max(parsed_rows, 'Teams'),
-                    'yammer_active':     _col_max(parsed_rows, 'Yammer'),
+                    'office_365_active': col_max(parsed_rows, 'Office 365'),
+                    'exchange_active':   col_max(parsed_rows, 'Exchange'),
+                    'onedrive_active':   col_max(parsed_rows, 'OneDrive'),
+                    'sharepoint_active': col_max(parsed_rows, 'SharePoint'),
+                    'teams_active':      col_max(parsed_rows, 'Teams'),
+                    'yammer_active':     col_max(parsed_rows, 'Yammer'),
                 }
             else:
                 client.active_users_summary = {'available': False, 'error': 'No data in report'}
