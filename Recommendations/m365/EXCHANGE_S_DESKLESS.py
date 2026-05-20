@@ -43,14 +43,14 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     
     # M365 Insights-based Observations
     if status == "Success" and m365_insights and m365_insights.get('available'):
-        total_active_users = m365_insights.get('total_active_users', 0)
+        total_users = m365_insights.get('total_users', 0)
         email_active_users = m365_insights.get('email_active_users', 0)
-        teams_active_users = m365_insights.get('teams_active_users', 0)        
+        teams_active_users = m365_insights.get('teams_active_users', 0)
         # ALWAYS create observation showing current frontline communication context (no threshold)
         obs_rec = new_recommendation(
             service="M365",
             feature=feature_name,
-            observation=f"Frontline communication baseline: {total_active_users:,} users with {email_active_users:,} email users and {teams_active_users:,} Teams users. Exchange Online Kiosk provides lightweight email for automated notifications - shift reminders, task assignments, schedule changes sent by agents or workflows. Not full Copilot integration, but essential notification infrastructure for frontline AI adoption where mobile workers need alert delivery without heavy mailbox features.",
+            observation=f"Frontline communication baseline: {total_users:,} users with {email_active_users:,} email users and {teams_active_users:,} Teams users. Exchange Online Kiosk provides lightweight email for automated notifications - shift reminders, task assignments, schedule changes sent by agents or workflows. Not full Copilot integration, but essential notification infrastructure for frontline AI adoption where mobile workers need alert delivery without heavy mailbox features.",
             recommendation="",
             link_text="Frontline Notifications",
             link_url="https://learn.microsoft.com/microsoft-365/frontline/",
