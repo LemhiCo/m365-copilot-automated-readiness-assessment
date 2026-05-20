@@ -43,7 +43,6 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     if status == "Success" and m365_insights and m365_insights.get('available'):
         total_users = m365_insights.get('total_users', 0)
 
-
         # ALWAYS create observation showing Windows update management context (no threshold)
         obs_rec = new_recommendation(
             service="M365",
