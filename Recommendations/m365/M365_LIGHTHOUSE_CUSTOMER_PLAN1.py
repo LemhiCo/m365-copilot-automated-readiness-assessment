@@ -39,12 +39,12 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     
     # M365 Insights-based Observations
     if status == "Success" and m365_insights and m365_insights.get('available'):
-        total_active_users = m365_insights.get('total_active_users', 0)        
+        total_users = m365_insights.get('total_users', 0)
         # ALWAYS create observation showing Lighthouse management context (no threshold)
         obs_rec = new_recommendation(
             service="M365",
             feature=feature_name,
-            observation=f"MSP management: {total_active_users:,} users under Lighthouse oversight. M365 Lighthouse IS the MSP platform for managing Copilot deployments across client tenants - centralized security baselines, compliance monitoring, deployment health, adoption tracking. MSPs use Lighthouse to ensure AI governance, monitor security posture, and track Copilot ROI across their customer portfolio without per-tenant logins.",
+            observation=f"MSP management: {total_users:,} users under Lighthouse oversight. M365 Lighthouse IS the MSP platform for managing Copilot deployments across client tenants - centralized security baselines, compliance monitoring, deployment health, adoption tracking. MSPs use Lighthouse to ensure AI governance, monitor security posture, and track Copilot ROI across their customer portfolio without per-tenant logins.",
             recommendation="",
             link_text="Lighthouse Copilot Management",
             link_url="https://learn.microsoft.com/microsoft-365/lighthouse/",

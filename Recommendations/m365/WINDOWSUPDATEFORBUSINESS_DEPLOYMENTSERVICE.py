@@ -41,14 +41,13 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     
     # M365 Insights-based Observations
     if status == "Success" and m365_insights and m365_insights.get('available'):
-        total_active_users = m365_insights.get('total_active_users', 0)
-        
-        
+        total_users = m365_insights.get('total_users', 0)
+
         # ALWAYS create observation showing Windows update management context (no threshold)
         obs_rec = new_recommendation(
             service="M365",
             feature=feature_name,
-            observation=f"Device update management: {total_active_users:,} users. Windows Update for Business ensures devices stay current for Copilot compatibility - automated deployment of security patches and feature releases. Minimizes version fragmentation that causes Copilot integration issues. Device management foundation enabling consistent AI capabilities across organization.",
+            observation=f"Device update management: {total_users:,} users. Windows Update for Business ensures devices stay current for Copilot compatibility - automated deployment of security patches and feature releases. Minimizes version fragmentation that causes Copilot integration issues. Device management foundation enabling consistent AI capabilities across organization.",
             recommendation="",
             link_text="Update Management",
             link_url="https://learn.microsoft.com/windows/deployment/update/",

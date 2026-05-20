@@ -45,14 +45,14 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     # M365 Insights-based Observations
     if status == "Success" and m365_insights and m365_insights.get('available'):
         email_active_users = m365_insights.get('email_active_users', 0)
-        total_active_users = m365_insights.get('total_active_users', 0)
+        total_users = m365_insights.get('total_users', 0)
         teams_active_users = m365_insights.get('teams_active_users', 0)
-        
+
         # ALWAYS create observation showing current email analytics context (no threshold)
         obs_rec = new_recommendation(
             service="M365",
             feature=feature_name,
-            observation=f"Communication analytics baseline: {email_active_users:,} active email users out of {total_active_users:,} total users. Exchange Analytics reveals communication patterns (email volume, response times, network density) that contextualize Copilot's impact - identify communication bottlenecks AI can eliminate, measure email reduction from Copilot summaries, detect collaboration silos agents can bridge. The metrics layer for AI-driven communication transformation.",
+            observation=f"Communication analytics baseline: {email_active_users:,} active email users out of {total_users:,} total users. Exchange Analytics reveals communication patterns (email volume, response times, network density) that contextualize Copilot's impact - identify communication bottlenecks AI can eliminate, measure email reduction from Copilot summaries, detect collaboration silos agents can bridge. The metrics layer for AI-driven communication transformation.",
             recommendation="",
             link_text="Email Intelligence",
             link_url="https://learn.microsoft.com/viva/insights/",

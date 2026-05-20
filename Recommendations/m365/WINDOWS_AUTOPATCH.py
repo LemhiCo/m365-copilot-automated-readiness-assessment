@@ -42,27 +42,28 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     # M365 Insights-based Observations
     if status == "Success" and m365_insights and m365_insights.get('available'):
         total_active_users = m365_insights.get('total_active_users', 0)
-        
-        
+        org_size = m365_insights.get('total_users', 0)
+
+
         # ALWAYS create observation showing Autopatch automation context (no threshold)
         obs_rec = new_recommendation(
             service="M365",
             feature=feature_name,
-            observation=f"Automated patching: {total_active_users:,} users. Windows Autopatch automatically maintains device currency for Copilot - eliminates manual update deployment, ensures latest AI features available immediately, reduces help desk burden from version issues. Zero-touch update management enabling consistent Copilot experiences without IT overhead.",
+            observation=f"Automated patching: {org_size:,} users. Windows Autopatch automatically maintains device currency for Copilot - eliminates manual update deployment, ensures latest AI features available immediately, reduces help desk burden from version issues. Zero-touch update management enabling consistent Copilot experiences without IT overhead.",
             recommendation="",
             link_text="Autopatch Automation",
             link_url="https://learn.microsoft.com/windows/deployment/windows-autopatch/",
             status="Success"
         )
         recommendations.append(obs_rec)
-        
+
         # Larger organizations - Autopatch saves significant IT effort
         if total_active_users >= 50:
             rec = new_recommendation(
                 service="M365",
                 feature=feature_name,
-                observation=f"Organization scale: {total_active_users:,} users indicate significant update management overhead. Autopatch automation valuable.",
-                recommendation=f"Leverage Windows Autopatch to eliminate manual patching effort for {total_active_users:,} devices. Autopatch automatically deploys Windows and M365 updates ensuring Copilot feature parity across organization without IT intervention. Calculate time savings: manual patching requires testing, deployment planning, and rollout coordination - Autopatch handles this automatically. Reduces version fragmentation causing Copilot compatibility issues.",
+                observation=f"Organization scale: {org_size:,} users indicate significant update management overhead. Autopatch automation valuable.",
+                recommendation=f"Leverage Windows Autopatch to eliminate manual patching effort for {org_size:,} devices. Autopatch automatically deploys Windows and M365 updates ensuring Copilot feature parity across organization without IT intervention. Calculate time savings: manual patching requires testing, deployment planning, and rollout coordination - Autopatch handles this automatically. Reduces version fragmentation causing Copilot compatibility issues.",
                 link_text="Autopatch Benefits",
                 link_url="https://learn.microsoft.com/windows/deployment/windows-autopatch/",
                 priority="Low",

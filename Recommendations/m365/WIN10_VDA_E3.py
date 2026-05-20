@@ -39,7 +39,8 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     # M365 Insights - Windows Enterprise Copilot Foundation
     if m365_insights:
         total_active_users = m365_insights.get('total_active_users', 0)
-        
+        org_size = m365_insights.get('total_users', 0)
+
         # Baseline observation - always created when insights available
         recommendations.append(new_recommendation(
             service="M365",
@@ -50,14 +51,14 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
             link_url="https://learn.microsoft.com/windows/whats-new/copilot/",
             status="Success"
         ))
-        
+
         # Threshold-based recommendation
         if total_active_users >= 200:
             recommendations.append(new_recommendation(
                 service="M365",
                 feature=feature_name,
-                observation=f"With {total_active_users} users, Windows Enterprise E3 provides managed device foundation for Windows Copilot OS integration and M365 Copilot security",
-                recommendation=f"Deploy Windows Enterprise E3 for your {total_active_users} users to enable Windows Copilot OS-level integration and secure M365 Copilot access. Use Group Policy and Intune to configure Copilot settings at scale: enable/disable Windows Copilot per user role, enforce data protection policies for AI-generated content, ensure BitLocker encryption on devices accessing sensitive AI services. Enterprise management critical for Copilot governance - control which users leverage AI, monitor compliance, audit AI interactions.",
+                observation=f"With {org_size} users, Windows Enterprise E3 provides managed device foundation for Windows Copilot OS integration and M365 Copilot security",
+                recommendation=f"Deploy Windows Enterprise E3 for your {org_size} users to enable Windows Copilot OS-level integration and secure M365 Copilot access. Use Group Policy and Intune to configure Copilot settings at scale: enable/disable Windows Copilot per user role, enforce data protection policies for AI-generated content, ensure BitLocker encryption on devices accessing sensitive AI services. Enterprise management critical for Copilot governance - control which users leverage AI, monitor compliance, audit AI interactions.",
                 link_text="Enterprise Copilot Deployment",
                 link_url="https://learn.microsoft.com/windows/whats-new/copilot/",
                 status="Insight",

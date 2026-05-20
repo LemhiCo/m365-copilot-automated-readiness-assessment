@@ -46,7 +46,6 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     
     # M365 Insights-based Observations
     if status == "Success" and m365_insights and m365_insights.get('available'):
-        total_active_users = m365_insights.get('total_active_users', 0)
         teams_total_meetings = m365_insights.get('teams_total_meetings', 0)
         teams_active_users = m365_insights.get('teams_active_users', 0)
         teams_avg_meetings_per_user = m365_insights.get('teams_avg_meetings_per_user', 0)

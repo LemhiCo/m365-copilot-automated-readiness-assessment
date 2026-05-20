@@ -45,28 +45,29 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
     # M365 Insights-based Observations
     if status == "Success" and m365_insights and m365_insights.get('available'):
         total_active_users = m365_insights.get('total_active_users', 0)
+        org_size = m365_insights.get('total_users', 0)
         teams_active_users = m365_insights.get('teams_active_users', 0)
         email_active_users = m365_insights.get('email_active_users', 0)
         teams_total_meetings = m365_insights.get('teams_total_meetings', 0)
-        
+
         # ALWAYS create observation showing current service context (no threshold)
         obs_rec = new_recommendation(
             service="M365",
             feature=feature_name,
-            observation=f"Service automation baseline: {total_active_users:,} users with {teams_active_users:,} Teams users. Queues App creates the workforce structure for conversational AI deployment - route customers to human agents OR bots, escalate from automated agents to specialists when needed, track interaction history that Copilot references. The foundational framework for hybrid human-AI customer service.",
+            observation=f"Service automation baseline: {org_size:,} users with {teams_active_users:,} Teams users. Queues App creates the workforce structure for conversational AI deployment - route customers to human agents OR bots, escalate from automated agents to specialists when needed, track interaction history that Copilot references. The foundational framework for hybrid human-AI customer service.",
             recommendation="",
             link_text="Frontline Queue Management",
             link_url="https://learn.microsoft.com/microsoftteams/manage-queues-app/",
             status="Success"
         )
         recommendations.append(obs_rec)
-        
+
         # Large frontline workforce - queue management critical
         if total_active_users >= 50 and teams_active_users >= 25:
             rec = new_recommendation(
                 service="M365",
                 feature=feature_name,
-                observation=f"Substantial workforce: {total_active_users:,} users with {teams_active_users:,} Teams users. Queues App can streamline customer service operations and enable future agent automation.",
+                observation=f"Substantial workforce: {org_size:,} users with {teams_active_users:,} Teams users. Queues App can streamline customer service operations and enable future agent automation.",
                 recommendation="Deploy Queues App for customer-facing teams to manage service requests efficiently. Structured queue data establishes foundation for future AI agent triage, automated routing, and intelligent wait time predictions based on queue patterns.",
                 link_text="Deploy Service Queues",
                 link_url="https://learn.microsoft.com/microsoftteams/manage-queues-app/",
@@ -74,13 +75,13 @@ def get_recommendation(sku_name, status="Success", m365_insights=None):
                 status="Insight"
             )
             recommendations.append(rec)
-        
+
         # Moderate service team - targeted queue deployment
         elif total_active_users >= 15 and teams_active_users >= 10:
             rec = new_recommendation(
                 service="M365",
                 feature=feature_name,
-                observation=f"Growing service team: {total_active_users:,} users with {teams_active_users:,} Teams users. Queues App can organize customer interactions and prepare for agent-assisted service.",
+                observation=f"Growing service team: {org_size:,} users with {teams_active_users:,} Teams users. Queues App can organize customer interactions and prepare for agent-assisted service.",
                 recommendation="Pilot Queues App with customer service or support teams. Start with single queue to manage incoming requests, then expand as workflows mature. Queue data will inform future agent automation for common inquiries.",
                 link_text="Start Queue Management",
                 link_url="https://learn.microsoft.com/microsoftteams/manage-queues-app/",
