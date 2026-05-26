@@ -54,8 +54,9 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
+            import sys
             import traceback
-            print(f"\n[ERROR] M365 pipeline failed: {e}")
+            print(f"\n[ERROR] M365 pipeline failed: {e}", file=sys.stderr)
             traceback.print_exc()
             return ([], [])
     
@@ -174,10 +175,10 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
-            with _stdout_lock:
-                print(f"[{get_timestamp()}] ERROR in defender_pipeline: {str(e)}")
-                import traceback
-                traceback.print_exc()
+            import sys
+            import traceback
+            print(f"[{get_timestamp()}] ERROR in defender_pipeline: {str(e)}", file=sys.stderr)
+            traceback.print_exc()
             return {'available': False, 'recommendations': []}
     
     async def power_platform_pipeline():
@@ -221,10 +222,10 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
-            with _stdout_lock:
-                sys.stdout.write(f'[{get_timestamp()}]   ✗ Power Platform pipeline error: {type(e).__name__}: {e}\n')
-                sys.stdout.flush()
+            import sys
             import traceback
+            sys.stderr.write(f'[{get_timestamp()}]   ✗ Power Platform pipeline error: {type(e).__name__}: {e}\n')
+            sys.stderr.flush()
             traceback.print_exc()
             return {'available': False, 'recommendations': []}
     
@@ -265,10 +266,10 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
-            with _stdout_lock:
-                sys.stdout.write(f'[{get_timestamp()}]   ✗ Copilot Studio pipeline error: {type(e).__name__}: {e}\n')
-                sys.stdout.flush()
+            import sys
             import traceback
+            sys.stderr.write(f'[{get_timestamp()}]   ✗ Copilot Studio pipeline error: {type(e).__name__}: {e}\n')
+            sys.stderr.flush()
             traceback.print_exc()
             return {'available': False, 'recommendations': []}
 
