@@ -54,8 +54,9 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
+            import sys
             import traceback
-            print(f"\n[ERROR] M365 pipeline failed: {e}")
+            print(f"\n[ERROR] M365 pipeline failed: {e}", file=sys.stderr)
             traceback.print_exc()
             return ([], [])
     
@@ -63,28 +64,30 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
         """Entra: Gather client data, then process"""
         if not run_entra:
             return {'available': False, 'recommendations': []}
-        
+
         try:
             # Gathering phase (has its own progress bar inside get_entra_client)
             from .get_entra_client import get_entra_client
             entra_client = await get_entra_client(client, tenant_id)
-            
+
             # Processing phase with progress bar
             import sys
-            
+
             with _stdout_lock:
                 sys.stdout.write(f'\r[{get_timestamp()}]   Entra Data Processing   [░░░░░░░░░░░░░░░░░░░░]   0%')
                 sys.stdout.flush()
-            
+
             from .get_entra_info import get_entra_info
             result = await get_entra_info(client, services_and_licenses, entra_client)
-            
+
             with _stdout_lock:
                 sys.stdout.write(f'\r[{get_timestamp()}]   ✓ Entra Data Processing   [████████████████████] 100%\n')
                 sys.stdout.flush()
-            
+
             return result
         except Exception as e:
+            import sys
+            print(f"[ERROR] entra_pipeline failed: {type(e).__name__}: {e}", file=sys.stderr)
             return {'available': False, 'recommendations': []}
     
     async def purview_pipeline():
@@ -137,8 +140,10 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
+            import sys
+            print(f"[ERROR] purview_pipeline failed: {type(e).__name__}: {e}", file=sys.stderr)
             return {'available': False, 'recommendations': []}
-    
+
     async def defender_pipeline():
         """Defender: Gather client data, then process"""
         if not run_defender:
@@ -170,10 +175,10 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
-            with _stdout_lock:
-                print(f"[{get_timestamp()}] ERROR in defender_pipeline: {str(e)}")
-                import traceback
-                traceback.print_exc()
+            import sys
+            import traceback
+            print(f"[{get_timestamp()}] ERROR in defender_pipeline: {str(e)}", file=sys.stderr)
+            traceback.print_exc()
             return {'available': False, 'recommendations': []}
     
     async def power_platform_pipeline():
@@ -217,10 +222,10 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
-            with _stdout_lock:
-                sys.stdout.write(f'[{get_timestamp()}]   ✗ Power Platform pipeline error: {type(e).__name__}: {e}\n')
-                sys.stdout.flush()
+            import sys
             import traceback
+            sys.stderr.write(f'[{get_timestamp()}]   ✗ Power Platform pipeline error: {type(e).__name__}: {e}\n')
+            sys.stderr.flush()
             traceback.print_exc()
             return {'available': False, 'recommendations': []}
     
@@ -261,10 +266,10 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             
             return result
         except Exception as e:
-            with _stdout_lock:
-                sys.stdout.write(f'[{get_timestamp()}]   ✗ Copilot Studio pipeline error: {type(e).__name__}: {e}\n')
-                sys.stdout.flush()
+            import sys
             import traceback
+            sys.stderr.write(f'[{get_timestamp()}]   ✗ Copilot Studio pipeline error: {type(e).__name__}: {e}\n')
+            sys.stderr.flush()
             traceback.print_exc()
             return {'available': False, 'recommendations': []}
 
@@ -397,9 +402,11 @@ def create_pipelines(client, services_and_licenses, tenant_id, service_config):
             )
             return {**catalog_result, "recommendations": combined_recs}
 
-        except Exception:
+        except Exception as e:
+            import sys
+            print(f"[ERROR] a365_pipeline failed: {type(e).__name__}: {e}", file=sys.stderr)
             return {'available': False, 'recommendations': []}
-    
+
     # Return dict of pipelines
     return {
         'm365': m365_pipeline,

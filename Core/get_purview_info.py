@@ -94,41 +94,51 @@ async def get_purview_info(client, services_and_licenses=None, purview_client=No
     # Collect async tasks for parallel execution
     import inspect
     async_tasks = []
+    async_task_labels = []
     added_features = set()
-    
+
     for lic in purview_plans:
         sku_name = lic.get('sku_part_number', 'Unknown')
         for plan in lic.get('service_plans', []):
             plan_name = plan.get('name')
-            
+
             # Only include if this feature actually belongs to purview service
             if determine_service_type(plan_name) != 'purview':
                 continue
-            
+
             # Skip if we've already added a recommendation for this service plan
             if plan_name in added_features:
                 continue
             added_features.add(plan_name)
-            
+
             status = plan.get('status', 'Success')
             # Generate recommendations for all service plans
             # Pass purview_client to enable deployment-aware recommendations
             rec = get_recommendation('purview', plan_name, sku_name, status, client=client, purview_client=purview_client)
-            
+
             # Collect async tasks for parallel execution
             if inspect.iscoroutine(rec):
                 async_tasks.append(rec)
+                async_task_labels.append(plan_name)
             else:
                 # Handle sync recommendations immediately
                 if isinstance(rec, list):
                     recommendations.extend(rec)
                 else:
                     recommendations.append(rec)
-    
-    # Run all async recommendations in parallel
+
+    # Run all async recommendations in parallel; return_exceptions=True prevents one
+    # failure from abandoning all in-flight tasks (LEM-611).
     if async_tasks:
-        results = await asyncio.gather(*async_tasks)
-        for result in results:
+        results = await asyncio.gather(*async_tasks, return_exceptions=True)
+        for label, result in zip(async_task_labels, results):
+            if isinstance(result, BaseException):
+                print(
+                    f"[WARNING] Purview recommendation failed for plan {label}: "
+                    f"{type(result).__name__}: {result}",
+                    file=sys.stderr,
+                )
+                continue
             if isinstance(result, list):
                 recommendations.extend(result)
             else:
