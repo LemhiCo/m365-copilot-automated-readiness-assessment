@@ -151,7 +151,7 @@ try {
 # Collect Retention Policies
 Write-Progress "      → Retention Compliance Policies..." -NoNewline
 try {
-    $retentionPolicies = Get-RetentionCompliancePolicy -ErrorAction Stop | Select-Object Name, Enabled, Type
+    $retentionPolicies = Get-RetentionCompliancePolicy -ErrorAction Stop | Select-Object Name, Enabled, Type, Workload, Mode
     $purviewData['retention_policies'] = @{
         count = $retentionPolicies.Count
         policies = $retentionPolicies
