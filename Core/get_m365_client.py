@@ -28,7 +28,8 @@ def col_max(rows, col):
 # "Basic Search Center" (SRCHCEN#0).
 SYSTEM_SITE_TEMPLATES = {
     'Tenant Admin Site',                          # TENANTADMIN#0 — SharePoint admin center
-    'SharePoint Online Tenant Fundamental Site',  # APPCATALOG#0  — app catalog / tenant fundamental
+    'SharePoint Online Tenant Fundamental Site',  # APPCATALOG#0  — app catalog (newer tenants)
+    'App Catalog Site',                           # APPCATALOG#0  — app catalog (older tenants)
     'Compliance Policy Center',                   # POLICYCTR#0   — Compliance Policy Center
 }
 

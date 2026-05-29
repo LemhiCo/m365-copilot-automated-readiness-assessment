@@ -128,6 +128,19 @@ def test_sharepoint_filter_excludes_deleted_and_system_templates():
     assert filtered[0]['Is Deleted'] == 'False'
 
 
+def test_sharepoint_filter_excludes_app_catalog_site_display_name_variant():
+    # 'App Catalog Site' is the display name APPCATALOG#0 uses on older tenants;
+    # newer tenants show 'SharePoint Online Tenant Fundamental Site'. Both are system sites.
+    # Confirmed from Diamond IT prod scan (2026-05-29).
+    rows = [
+        {'Root Web Template': 'App Catalog Site', 'Is Deleted': 'False', 'File Count': '10', 'Page View Count': '0'},
+        {'Root Web Template': 'Group',             'Is Deleted': 'False', 'File Count': '50', 'Page View Count': '20'},
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 1
+    assert filtered[0]['Root Web Template'] == 'Group'
+
+
 def test_sharepoint_filter_case_insensitive_deleted():
     rows = [
         {'Root Web Template': 'STS#0', 'Is Deleted': 'true'},   # lowercase — still deleted
