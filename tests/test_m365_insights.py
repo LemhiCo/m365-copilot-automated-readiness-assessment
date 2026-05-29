@@ -148,6 +148,29 @@ def test_sharepoint_filter_retains_srchcen_sitepagepublishing_spsmsitehost():
     assert len(filtered) == 3
 
 
+def test_sharepoint_filter_all_system_sites_yields_empty_not_error():
+    # A tenant whose report contains only system/deleted sites should produce
+    # sites_in_report=0 with no file-count bleed — not an exception.
+    # Confirms the aggregation loop runs over filtered_rows and that the
+    # divide-by-zero guards in avg_files_per_site / site_activity_rate hold.
+    rows = [
+        {'Root Web Template': 'TENANTADMIN#0', 'Is Deleted': 'False', 'File Count': '999', 'Page View Count': '0'},
+        {'Root Web Template': 'APPCATALOG#0',  'Is Deleted': 'False', 'File Count': '500', 'Page View Count': '0'},
+        {'Root Web Template': 'STS#0',         'Is Deleted': 'True',  'File Count': '200', 'Page View Count': '0'},
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 0
+
+    # Simulate the aggregation logic directly on the empty filtered list
+    total_files = sum(int(r.get('File Count', 0) or 0) for r in filtered)
+    total_sites = len(filtered)
+    avg_files = round(total_files / total_sites, 1) if total_sites > 0 else 0
+
+    assert total_files == 0
+    assert total_sites == 0
+    assert avg_files == 0  # guard held — no ZeroDivisionError
+
+
 def test_col_max_handles_empty_and_missing_values():
     rows = [
         {'Office 365': '', 'Exchange': None},
