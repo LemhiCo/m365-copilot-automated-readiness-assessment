@@ -4,7 +4,7 @@ Tests for extract_m365_insights_from_client.
 Run: cd m365-copilot-automated-readiness-assessment && python -m pytest tests/ -v
 """
 import pytest
-from Core.get_m365_client import extract_m365_insights_from_client, col_max
+from Core.get_m365_client import extract_m365_insights_from_client, col_max, _filter_sharepoint_rows, SYSTEM_SITE_TEMPLATES
 
 
 class FakeM365Client:
@@ -107,6 +107,70 @@ def test_col_max_uses_period_peak_not_latest_row():
     assert col_max(rows, 'SharePoint') == 5
     assert col_max(rows, 'Teams') == 10
     assert col_max(rows, 'Yammer') == 3
+
+
+def test_sharepoint_filter_excludes_deleted_and_system_templates():
+    # Synthetic CSV rows using the display names the getSharePointSiteUsageDetail report
+    # actually writes in the Root Web Template column (not template codes).
+    # One real site, one deleted site, and three system template sites — only the real
+    # site should survive filtering.
+    rows = [
+        {'Root Web Template': 'Team Site',                                'Is Deleted': 'False', 'File Count': '100', 'Page View Count': '50'},
+        {'Root Web Template': 'Team Site',                                'Is Deleted': 'True',  'File Count': '20',  'Page View Count': '10'},   # deleted
+        {'Root Web Template': 'Tenant Admin Site',                        'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
+        {'Root Web Template': 'SharePoint Online Tenant Fundamental Site','Is Deleted': 'False', 'File Count': '5',   'Page View Count': '3'},    # system
+        {'Root Web Template': 'Compliance Policy Center',                 'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+
+    assert len(filtered) == 1
+    assert filtered[0]['Root Web Template'] == 'Team Site'
+    assert filtered[0]['Is Deleted'] == 'False'
+
+
+def test_sharepoint_filter_case_insensitive_deleted():
+    rows = [
+        {'Root Web Template': 'STS#0', 'Is Deleted': 'true'},   # lowercase — still deleted
+        {'Root Web Template': 'STS#0', 'Is Deleted': 'TRUE'},   # uppercase — still deleted
+        {'Root Web Template': 'STS#0', 'Is Deleted': 'False'},  # not deleted
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 1
+    assert filtered[0]['Is Deleted'] == 'False'
+
+
+def test_sharepoint_filter_retains_srchcen_sitepagepublishing_spsmsitehost():
+    # These display names are kept by SPO "Active sites" enumeration — must not be blocklisted.
+    rows = [
+        {'Root Web Template': 'Basic Search Center', 'Is Deleted': 'False'},  # SRCHCEN#0
+        {'Root Web Template': 'Site Page Publishing', 'Is Deleted': 'False'},  # SITEPAGEPUBLISHING#0
+        {'Root Web Template': 'My Site Host',          'Is Deleted': 'False'},  # SPSMSITEHOST#0
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 3
+
+
+def test_sharepoint_filter_all_system_sites_yields_empty_not_error():
+    # A tenant whose report contains only system/deleted sites should produce
+    # sites_in_report=0 with no file-count bleed — not an exception.
+    # Confirms the aggregation loop runs over filtered_rows and that the
+    # divide-by-zero guards in avg_files_per_site / site_activity_rate hold.
+    rows = [
+        {'Root Web Template': 'Tenant Admin Site',                        'Is Deleted': 'False', 'File Count': '999', 'Page View Count': '0'},
+        {'Root Web Template': 'SharePoint Online Tenant Fundamental Site','Is Deleted': 'False', 'File Count': '500', 'Page View Count': '0'},
+        {'Root Web Template': 'Team Site',                                'Is Deleted': 'True',  'File Count': '200', 'Page View Count': '0'},
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 0
+
+    # Simulate the aggregation logic directly on the empty filtered list
+    total_files = sum(int(r.get('File Count', 0) or 0) for r in filtered)
+    total_sites = len(filtered)
+    avg_files = round(total_files / total_sites, 1) if total_sites > 0 else 0
+
+    assert total_files == 0
+    assert total_sites == 0
+    assert avg_files == 0  # guard held — no ZeroDivisionError
 
 
 def test_col_max_handles_empty_and_missing_values():

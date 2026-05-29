@@ -7,6 +7,8 @@ Used for enhanced M365 Copilot adoption observations.
 import asyncio
 import csv
 import io
+import sys
+from collections import Counter
 from azure.core.exceptions import HttpResponseError
 from .spinner import get_timestamp, _stdout_lock
 from datetime import datetime, timedelta
@@ -15,6 +17,29 @@ def col_max(rows, col):
     # Peak active users across the 30-day period — single-day sampling is volatile
     # (frequently 0 on weekends/holidays for low-activity tenants). LEM-566.
     return max((int(r.get(col, 0) or 0) for r in rows), default=0)
+
+
+# Blocklist of Root Web Template display names that correspond to system/infrastructure
+# sites excluded by SharePoint admin's "Active sites" enumeration. The getSharePointSiteUsageDetail
+# CSV report writes display names in this column, not template codes.
+# Use a blocklist (not an allowlist) so unknown real templates are retained rather than
+# silently dropped. Intentionally absent (SPO keeps them, confirmed in story-3-spo-rest-retest.md):
+# "Site Page Publishing" (SITEPAGEPUBLISHING#0), "My Site Host" (SPSMSITEHOST#0),
+# "Basic Search Center" (SRCHCEN#0).
+SYSTEM_SITE_TEMPLATES = {
+    'Tenant Admin Site',                          # TENANTADMIN#0 — SharePoint admin center
+    'SharePoint Online Tenant Fundamental Site',  # APPCATALOG#0  — app catalog / tenant fundamental
+    'Compliance Policy Center',                   # POLICYCTR#0   — Compliance Policy Center
+}
+
+
+def _filter_sharepoint_rows(rows):
+    """Exclude deleted sites and known system/infrastructure template sites."""
+    return [
+        r for r in rows
+        if (r.get('Is Deleted') or '').strip().lower() != 'true'
+        and (r.get('Root Web Template') or '').strip() not in SYSTEM_SITE_TEMPLATES
+    ]
 
 
 async def get_m365_client(graph_client):
@@ -103,7 +128,6 @@ async def get_m365_client(graph_client):
         }
         
         # Execute all API calls in parallel with progress bar
-        import sys
         from .spinner import _stdout_lock, get_timestamp
         
         # Show initial progress bar
@@ -301,23 +325,36 @@ async def get_m365_client(graph_client):
         sharepoint_response = response_dict.get('sharepoint_usage')
         if not isinstance(sharepoint_response, Exception) and sharepoint_response:
             parsed_rows = parse_csv_report(sharepoint_response)
-            
+
             if parsed_rows:
+                filtered_rows = _filter_sharepoint_rows(parsed_rows)
+
+                # Permanent observability: log template distribution from raw report so
+                # template drift (Microsoft adds new system templates) is catchable from
+                # Log Analytics without needing to replay the scan.
+                tmpl_dist = Counter((r.get('Root Web Template') or '?') for r in parsed_rows)
+                deleted_n = sum(1 for r in parsed_rows if (r.get('Is Deleted') or '').strip().lower() == 'true')
+                print(
+                    f"[sharepoint] root-web-template distribution: {dict(tmpl_dist)} | deleted={deleted_n} | "
+                    f"raw={len(parsed_rows)} filtered={len(filtered_rows)}",
+                    file=sys.stderr
+                )
+
                 client.available = True
-                # Aggregate SharePoint metrics in single pass
+                # Aggregate SharePoint metrics in single pass over filtered rows only
                 total_files = 0
                 total_page_views = 0
                 active_sites = 0
-                
-                for row in parsed_rows:
+
+                for row in filtered_rows:
                     total_files += int(row.get('File Count', 0) or 0)
                     page_views = int(row.get('Page View Count', 0) or 0)
                     total_page_views += page_views
                     if page_views > 0:
                         active_sites += 1
-                
-                total_sites_in_report = len(parsed_rows)
-                
+
+                total_sites_in_report = len(filtered_rows)
+
                 client.sharepoint_summary = {
                     'available': True,
                     'report_period': report_period,
