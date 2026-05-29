@@ -4,7 +4,7 @@ Tests for extract_m365_insights_from_client.
 Run: cd m365-copilot-automated-readiness-assessment && python -m pytest tests/ -v
 """
 import pytest
-from Core.get_m365_client import extract_m365_insights_from_client, col_max
+from Core.get_m365_client import extract_m365_insights_from_client, col_max, _filter_sharepoint_rows, SYSTEM_SITE_TEMPLATES
 
 
 class FakeM365Client:
@@ -107,6 +107,45 @@ def test_col_max_uses_period_peak_not_latest_row():
     assert col_max(rows, 'SharePoint') == 5
     assert col_max(rows, 'Teams') == 10
     assert col_max(rows, 'Yammer') == 3
+
+
+def test_sharepoint_filter_excludes_deleted_and_system_templates():
+    # Synthetic CSV rows representing one real site, one deleted site, and two system
+    # template sites. Only the real site should survive filtering.
+    rows = [
+        {'Root Web Template': 'STS#0',         'Is Deleted': 'False', 'File Count': '100', 'Page View Count': '50'},
+        {'Root Web Template': 'STS#0',         'Is Deleted': 'True',  'File Count': '20',  'Page View Count': '10'},   # deleted
+        {'Root Web Template': 'TENANTADMIN#0', 'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
+        {'Root Web Template': 'APPCATALOG#0',  'Is Deleted': 'False', 'File Count': '5',   'Page View Count': '3'},    # system
+        {'Root Web Template': 'POLICYCTR#0',   'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+
+    assert len(filtered) == 1
+    assert filtered[0]['Root Web Template'] == 'STS#0'
+    assert filtered[0]['Is Deleted'] == 'False'
+
+
+def test_sharepoint_filter_case_insensitive_deleted():
+    rows = [
+        {'Root Web Template': 'STS#0', 'Is Deleted': 'true'},   # lowercase — still deleted
+        {'Root Web Template': 'STS#0', 'Is Deleted': 'TRUE'},   # uppercase — still deleted
+        {'Root Web Template': 'STS#0', 'Is Deleted': 'False'},  # not deleted
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 1
+    assert filtered[0]['Is Deleted'] == 'False'
+
+
+def test_sharepoint_filter_retains_srchcen_sitepagepublishing_spsmsitehost():
+    # These templates are kept by SPO "Active sites" enumeration — must not be blocklisted.
+    rows = [
+        {'Root Web Template': 'SRCHCEN#0',          'Is Deleted': 'False'},
+        {'Root Web Template': 'SITEPAGEPUBLISHING#0','Is Deleted': 'False'},
+        {'Root Web Template': 'SPSMSITEHOST#0',      'Is Deleted': 'False'},
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 3
 
 
 def test_col_max_handles_empty_and_missing_values():
