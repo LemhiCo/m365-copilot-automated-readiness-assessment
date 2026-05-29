@@ -19,15 +19,17 @@ def col_max(rows, col):
     return max((int(r.get(col, 0) or 0) for r in rows), default=0)
 
 
-# Blocklist of Root Web Template values that correspond to system/infrastructure sites
-# excluded by SharePoint admin's "Active sites" enumeration. Use a blocklist (not an
-# allowlist) so unknown real templates are retained rather than silently dropped.
-# SRCHCEN#0, SITEPAGEPUBLISHING#0, SPSMSITEHOST#0 are intentionally absent — the SPO
-# "Active sites" enumeration keeps them (confirmed in story-3-spo-rest-retest.md).
+# Blocklist of Root Web Template display names that correspond to system/infrastructure
+# sites excluded by SharePoint admin's "Active sites" enumeration. The getSharePointSiteUsageDetail
+# CSV report writes display names in this column, not template codes.
+# Use a blocklist (not an allowlist) so unknown real templates are retained rather than
+# silently dropped. Intentionally absent (SPO keeps them, confirmed in story-3-spo-rest-retest.md):
+# "Site Page Publishing" (SITEPAGEPUBLISHING#0), "My Site Host" (SPSMSITEHOST#0),
+# "Basic Search Center" (SRCHCEN#0).
 SYSTEM_SITE_TEMPLATES = {
-    'TENANTADMIN#0',  # SharePoint admin center
-    'APPCATALOG#0',   # App catalog / tenant fundamental
-    'POLICYCTR#0',    # Compliance Policy Center
+    'Tenant Admin Site',                          # TENANTADMIN#0 — SharePoint admin center
+    'SharePoint Online Tenant Fundamental Site',  # APPCATALOG#0  — app catalog / tenant fundamental
+    'Compliance Policy Center',                   # POLICYCTR#0   — Compliance Policy Center
 }
 
 

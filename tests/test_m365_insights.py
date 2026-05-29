@@ -110,19 +110,21 @@ def test_col_max_uses_period_peak_not_latest_row():
 
 
 def test_sharepoint_filter_excludes_deleted_and_system_templates():
-    # Synthetic CSV rows representing one real site, one deleted site, and two system
-    # template sites. Only the real site should survive filtering.
+    # Synthetic CSV rows using the display names the getSharePointSiteUsageDetail report
+    # actually writes in the Root Web Template column (not template codes).
+    # One real site, one deleted site, and three system template sites — only the real
+    # site should survive filtering.
     rows = [
-        {'Root Web Template': 'STS#0',         'Is Deleted': 'False', 'File Count': '100', 'Page View Count': '50'},
-        {'Root Web Template': 'STS#0',         'Is Deleted': 'True',  'File Count': '20',  'Page View Count': '10'},   # deleted
-        {'Root Web Template': 'TENANTADMIN#0', 'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
-        {'Root Web Template': 'APPCATALOG#0',  'Is Deleted': 'False', 'File Count': '5',   'Page View Count': '3'},    # system
-        {'Root Web Template': 'POLICYCTR#0',   'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
+        {'Root Web Template': 'Team Site',                                'Is Deleted': 'False', 'File Count': '100', 'Page View Count': '50'},
+        {'Root Web Template': 'Team Site',                                'Is Deleted': 'True',  'File Count': '20',  'Page View Count': '10'},   # deleted
+        {'Root Web Template': 'Tenant Admin Site',                        'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
+        {'Root Web Template': 'SharePoint Online Tenant Fundamental Site','Is Deleted': 'False', 'File Count': '5',   'Page View Count': '3'},    # system
+        {'Root Web Template': 'Compliance Policy Center',                 'Is Deleted': 'False', 'File Count': '0',   'Page View Count': '0'},    # system
     ]
     filtered = _filter_sharepoint_rows(rows)
 
     assert len(filtered) == 1
-    assert filtered[0]['Root Web Template'] == 'STS#0'
+    assert filtered[0]['Root Web Template'] == 'Team Site'
     assert filtered[0]['Is Deleted'] == 'False'
 
 
@@ -138,11 +140,11 @@ def test_sharepoint_filter_case_insensitive_deleted():
 
 
 def test_sharepoint_filter_retains_srchcen_sitepagepublishing_spsmsitehost():
-    # These templates are kept by SPO "Active sites" enumeration — must not be blocklisted.
+    # These display names are kept by SPO "Active sites" enumeration — must not be blocklisted.
     rows = [
-        {'Root Web Template': 'SRCHCEN#0',          'Is Deleted': 'False'},
-        {'Root Web Template': 'SITEPAGEPUBLISHING#0','Is Deleted': 'False'},
-        {'Root Web Template': 'SPSMSITEHOST#0',      'Is Deleted': 'False'},
+        {'Root Web Template': 'Basic Search Center', 'Is Deleted': 'False'},  # SRCHCEN#0
+        {'Root Web Template': 'Site Page Publishing', 'Is Deleted': 'False'},  # SITEPAGEPUBLISHING#0
+        {'Root Web Template': 'My Site Host',          'Is Deleted': 'False'},  # SPSMSITEHOST#0
     ]
     filtered = _filter_sharepoint_rows(rows)
     assert len(filtered) == 3
@@ -154,9 +156,9 @@ def test_sharepoint_filter_all_system_sites_yields_empty_not_error():
     # Confirms the aggregation loop runs over filtered_rows and that the
     # divide-by-zero guards in avg_files_per_site / site_activity_rate hold.
     rows = [
-        {'Root Web Template': 'TENANTADMIN#0', 'Is Deleted': 'False', 'File Count': '999', 'Page View Count': '0'},
-        {'Root Web Template': 'APPCATALOG#0',  'Is Deleted': 'False', 'File Count': '500', 'Page View Count': '0'},
-        {'Root Web Template': 'STS#0',         'Is Deleted': 'True',  'File Count': '200', 'Page View Count': '0'},
+        {'Root Web Template': 'Tenant Admin Site',                        'Is Deleted': 'False', 'File Count': '999', 'Page View Count': '0'},
+        {'Root Web Template': 'SharePoint Online Tenant Fundamental Site','Is Deleted': 'False', 'File Count': '500', 'Page View Count': '0'},
+        {'Root Web Template': 'Team Site',                                'Is Deleted': 'True',  'File Count': '200', 'Page View Count': '0'},
     ]
     filtered = _filter_sharepoint_rows(rows)
     assert len(filtered) == 0
