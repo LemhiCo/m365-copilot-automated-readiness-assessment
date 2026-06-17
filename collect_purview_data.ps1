@@ -166,7 +166,7 @@ try {
 # Collect Label Policies
 Write-Progress "      → Sensitivity Label Policies..." -NoNewline
 try {
-    $labelPolicies = Get-LabelPolicy -ErrorAction Stop -WarningAction SilentlyContinue | Select-Object Name, Enabled, Mode
+    $labelPolicies = Get-LabelPolicy -ErrorAction Stop -WarningAction SilentlyContinue | Select-Object Name, Enabled, Mode, Labels, ScopedLabels
     $purviewData['label_policies'] = @{
         count = $labelPolicies.Count
         policies = $labelPolicies
