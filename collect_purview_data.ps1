@@ -136,7 +136,7 @@ try {
 # Collect Sensitivity Labels
 Write-Progress "      → Sensitivity Labels..." -NoNewline
 try {
-    $labels = Get-Label -ErrorAction Stop | Select-Object Name, DisplayName, Tooltip, Enabled
+    $labels = Get-Label -ErrorAction Stop | Select-Object Name, DisplayName, Guid, ContentType, ParentId, Tooltip, Enabled
     $purviewData['sensitivity_labels'] = @{
         count = $labels.Count
         labels = $labels
