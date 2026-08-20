@@ -7,6 +7,7 @@ Used for enhanced M365 Copilot adoption observations.
 import asyncio
 import csv
 import io
+import re
 import sys
 from collections import Counter
 from azure.core.exceptions import HttpResponseError
@@ -34,13 +35,58 @@ SYSTEM_SITE_TEMPLATES = {
 }
 
 
+def _normalize_template(template):
+    """Strip non-alphanumerics and uppercase. Mirrors lemhi-api's isRedirectSiteTemplate
+    (dataGovernance.service.js) so both sources use one definition across the two spellings
+    Microsoft emits: the SPO template code ('REDIRECTSITE#0') and the report display name
+    ('Redirect Site')."""
+    return re.sub(r'[^a-zA-Z0-9]', '', template or '').upper()
+
+
+def _is_redirect_site_template(template):
+    """A tenant rename leaves one redirect site per renamed site. Not reviewable or
+    configurable, and SharePoint's own admin center hides them from Active Sites."""
+    return _normalize_template(template).startswith('REDIRECTSITE')
+
+
+def _normalize_site_url(url):
+    """Lowercase, strip trailing slash — for matching a Graph site's web_url against a
+    Site URL value from the usage report CSV."""
+    return (url or '').strip().lower().rstrip('/')
+
+
 def _filter_sharepoint_rows(rows):
-    """Exclude deleted sites and known system/infrastructure template sites."""
+    """Exclude deleted sites, known system/infrastructure template sites, and redirect sites."""
     return [
         r for r in rows
         if (r.get('Is Deleted') or '').strip().lower() != 'true'
         and (r.get('Root Web Template') or '').strip() not in SYSTEM_SITE_TEMPLATES
+        and not _is_redirect_site_template(r.get('Root Web Template'))
     ]
+
+
+def _filter_redirect_sites(raw_sites, redirect_site_urls):
+    """Exclude redirect sites from a Graph sites.get() result list.
+
+    Graph's site resource carries no web-template property, so this uses two signals:
+    primary — the site's web_url matches a Site URL the usage-report CSV tagged as a redirect
+    template (redirect_site_urls, normalized via _normalize_site_url); fallback — the site's own
+    display_name normalizes to exactly 'REDIRECTSITE', for a renamed tenant whose usage report
+    omitted the row. Returns (filtered_sites, excluded_by_url, excluded_by_display_name).
+    """
+    filtered = []
+    excluded_by_url = 0
+    excluded_by_display_name = 0
+    for site in raw_sites:
+        normalized_url = _normalize_site_url(getattr(site, 'web_url', None))
+        if normalized_url and normalized_url in redirect_site_urls:
+            excluded_by_url += 1
+            continue
+        if _normalize_template(getattr(site, 'display_name', None)) == 'REDIRECTSITE':
+            excluded_by_display_name += 1
+            continue
+        filtered.append(site)
+    return filtered, excluded_by_url, excluded_by_display_name
 
 
 async def get_m365_client(graph_client):
@@ -186,13 +232,34 @@ async def get_m365_client(graph_client):
                         file=sys.stderr,
                     )
 
+        # Parse the SharePoint usage CSV up front (hoisted ahead of its own processing block below)
+        # so the Sites block can derive redirect-site URLs from it before computing sites_summary.
+        # Both responses come from the same response_dict — no extra API call, just a reordering.
+        sharepoint_response = response_dict.get('sharepoint_usage')
+        sharepoint_parsed_rows = []
+        if not isinstance(sharepoint_response, Exception) and sharepoint_response:
+            sharepoint_parsed_rows = parse_csv_report(sharepoint_response)
+
+        # Primary redirect-site signal: Site URL values from usage-report rows whose Root Web
+        # Template is a redirect template. Graph exposes no template on the site resource itself,
+        # so this report-derived set is how sites.get() results get filtered below.
+        redirect_site_urls = {
+            _normalize_site_url(r.get('Site URL'))
+            for r in sharepoint_parsed_rows
+            if _is_redirect_site_template(r.get('Root Web Template'))
+        }
+        redirect_site_urls.discard('')
+
         # Process Sites data
         sites_response = response_dict.get('sites')
         if not isinstance(sites_response, Exception) and sites_response:
             try:
-                client.sites = sites_response.value if hasattr(sites_response, 'value') else []
+                raw_sites = sites_response.value if hasattr(sites_response, 'value') else []
+                client.sites, excluded_by_url, excluded_by_display_name = _filter_redirect_sites(
+                    raw_sites, redirect_site_urls
+                )
                 client.available = True
-                
+
                 # Pre-compute sites summary
                 total_sites = len(client.sites)
                 client.sites_summary = {
@@ -200,6 +267,13 @@ async def get_m365_client(graph_client):
                     'site_names': [site.display_name for site in client.sites if hasattr(site, 'display_name')],
                     'root_site_id': client.sites[0].id if total_sites > 0 and hasattr(client.sites[0], 'id') else None
                 }
+                if excluded_by_url or excluded_by_display_name:
+                    print(
+                        f"[sharepoint] excluded {excluded_by_url + excluded_by_display_name} redirect "
+                        f"site(s) from Graph sites listing (by_url={excluded_by_url}, "
+                        f"by_display_name={excluded_by_display_name})",
+                        file=sys.stderr,
+                    )
             except Exception as e:
                 client.sites_summary = {'total': 0, 'error': f'Failed to process sites: {str(e)}'}
         else:
@@ -322,10 +396,10 @@ async def get_m365_client(graph_client):
             client.teams_summary = {'available': False}
         
         # Process SharePoint Usage Report
-        # Parse CSV and extract SharePoint site metrics
-        sharepoint_response = response_dict.get('sharepoint_usage')
+        # Parse CSV (already parsed above, hoisted for the Sites block's redirect-URL derivation)
+        # and extract SharePoint site metrics.
         if not isinstance(sharepoint_response, Exception) and sharepoint_response:
-            parsed_rows = parse_csv_report(sharepoint_response)
+            parsed_rows = sharepoint_parsed_rows
 
             if parsed_rows:
                 filtered_rows = _filter_sharepoint_rows(parsed_rows)
@@ -335,9 +409,10 @@ async def get_m365_client(graph_client):
                 # Log Analytics without needing to replay the scan.
                 tmpl_dist = Counter((r.get('Root Web Template') or '?') for r in parsed_rows)
                 deleted_n = sum(1 for r in parsed_rows if (r.get('Is Deleted') or '').strip().lower() == 'true')
+                redirect_n = sum(1 for r in parsed_rows if _is_redirect_site_template(r.get('Root Web Template')))
                 print(
                     f"[sharepoint] root-web-template distribution: {dict(tmpl_dist)} | deleted={deleted_n} | "
-                    f"raw={len(parsed_rows)} filtered={len(filtered_rows)}",
+                    f"redirect={redirect_n} | raw={len(parsed_rows)} filtered={len(filtered_rows)}",
                     file=sys.stderr
                 )
 
