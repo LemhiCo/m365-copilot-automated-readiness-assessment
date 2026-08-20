@@ -4,7 +4,20 @@ Tests for extract_m365_insights_from_client.
 Run: cd m365-copilot-automated-readiness-assessment && python -m pytest tests/ -v
 """
 import pytest
-from Core.get_m365_client import extract_m365_insights_from_client, col_max, _filter_sharepoint_rows, SYSTEM_SITE_TEMPLATES
+from Core.get_m365_client import (
+    extract_m365_insights_from_client,
+    col_max,
+    _filter_sharepoint_rows,
+    _filter_redirect_sites,
+    _is_redirect_site_template,
+    SYSTEM_SITE_TEMPLATES,
+)
+
+
+class FakeSite:
+    def __init__(self, id=None, display_name=None):
+        self.id = id
+        self.display_name = display_name
 
 
 class FakeM365Client:
@@ -184,6 +197,68 @@ def test_sharepoint_filter_all_system_sites_yields_empty_not_error():
     assert total_files == 0
     assert total_sites == 0
     assert avg_files == 0  # guard held — no ZeroDivisionError
+
+
+def test_is_redirect_site_template_matches_both_spellings():
+    for template in ('REDIRECTSITE#0', 'Redirect Site', 'RedirectSite', 'redirectsite'):
+        assert _is_redirect_site_template(template) is True, f"expected True for {template!r}"
+
+
+def test_is_redirect_site_template_false_for_non_redirect_values():
+    for template in ('GROUP#0', 'STS#3', 'TEAM SITE', '', None, 'STS'):
+        assert _is_redirect_site_template(template) is False, f"expected False for {template!r}"
+
+
+def test_sharepoint_filter_excludes_redirect_sites_both_spellings():
+    # A tenant rename leaves one redirect site per renamed site. The report writes
+    # the SPO template code ("REDIRECTSITE#0") on some tenants and a display name
+    # ("Redirect Site") on others — both must be excluded.
+    rows = [
+        {'Root Web Template': 'REDIRECTSITE#0', 'Is Deleted': 'False', 'File Count': '0', 'Page View Count': '0'},
+        {'Root Web Template': 'Redirect Site',  'Is Deleted': 'False', 'File Count': '0', 'Page View Count': '0'},
+        {'Root Web Template': 'Group',          'Is Deleted': 'False', 'File Count': '50', 'Page View Count': '20'},
+    ]
+    filtered = _filter_sharepoint_rows(rows)
+    assert len(filtered) == 1
+    assert filtered[0]['Root Web Template'] == 'Group'
+
+
+def test_filter_redirect_sites_excludes_by_report_site_id():
+    # Graph's composite site id is "hostname,siteCollectionId,webId" — the middle segment is
+    # what's comparable against the usage report's Site Id column.
+    sites = [
+        FakeSite(id='contoso.sharepoint.com,aaaaaaaa-0000-0000-0000-000000000001,bbb', display_name='A'),
+        FakeSite(id='contoso.sharepoint.com,CCCCCCCC-0000-0000-0000-000000000002,ddd', display_name='Old Name'),
+    ]
+    redirect_ids = {'cccccccc-0000-0000-0000-000000000002'}
+    filtered, by_id, by_name = _filter_redirect_sites(sites, redirect_ids)
+    assert [s.display_name for s in filtered] == ['A']
+    assert by_id == 1
+    assert by_name == 0
+
+
+def test_filter_redirect_sites_excludes_by_display_name_when_id_unmatched():
+    # Fallback path: usage report unavailable or missing the row, so redirect_site_ids is empty,
+    # but the site's own display_name identifies it as a redirect site.
+    sites = [
+        FakeSite(id='contoso.sharepoint.com,aaaaaaaa-0000-0000-0000-000000000001,bbb', display_name='A'),
+        FakeSite(id='contoso.sharepoint.com,eeeeeeee-0000-0000-0000-000000000003,fff', display_name='RedirectSite'),
+    ]
+    filtered, by_id, by_name = _filter_redirect_sites(sites, set())
+    assert [s.display_name for s in filtered] == ['A']
+    assert by_id == 0
+    assert by_name == 1
+
+
+def test_filter_redirect_sites_unchanged_when_no_redirect_sites_present():
+    sites = [
+        FakeSite(id='contoso.sharepoint.com,aaaaaaaa-0000-0000-0000-000000000001,bbb', display_name='A'),
+        FakeSite(id='contoso.sharepoint.com,ffffffff-0000-0000-0000-000000000004,ggg', display_name='B'),
+    ]
+    filtered, by_id, by_name = _filter_redirect_sites(sites, set())
+    assert filtered == sites
+    assert by_id == 0
+    assert by_name == 0
 
 
 def test_col_max_handles_empty_and_missing_values():
