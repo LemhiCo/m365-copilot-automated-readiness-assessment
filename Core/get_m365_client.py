@@ -49,10 +49,20 @@ def _is_redirect_site_template(template):
     return _normalize_template(template).startswith('REDIRECTSITE')
 
 
-def _normalize_site_url(url):
-    """Lowercase, strip trailing slash — for matching a Graph site's web_url against a
-    Site URL value from the usage report CSV."""
-    return (url or '').strip().lower().rstrip('/')
+def _normalize_site_id(site_id):
+    """Lowercase, strip whitespace — for matching a Graph site's site-collection GUID against
+    the usage report CSV's Site Id column."""
+    return (site_id or '').strip().lower()
+
+
+def _graph_site_collection_id(site):
+    """Extract the site-collection GUID from a Graph site's composite id
+    ('hostname,siteCollectionId,webId') for matching against the usage report's Site Id column.
+    Site URL is unreliable here — Microsoft blanks it out under the default concealed-user-info
+    privacy setting (same reason lemhi-api's computeNoOwnerFromReport joins on Site Id, not URL)."""
+    site_id = getattr(site, 'id', None) or ''
+    parts = site_id.split(',')
+    return parts[1] if len(parts) > 1 else ''
 
 
 def _filter_sharepoint_rows(rows):
@@ -65,28 +75,29 @@ def _filter_sharepoint_rows(rows):
     ]
 
 
-def _filter_redirect_sites(raw_sites, redirect_site_urls):
+def _filter_redirect_sites(raw_sites, redirect_site_ids):
     """Exclude redirect sites from a Graph sites.get() result list.
 
     Graph's site resource carries no web-template property, so this uses two signals:
-    primary — the site's web_url matches a Site URL the usage-report CSV tagged as a redirect
-    template (redirect_site_urls, normalized via _normalize_site_url); fallback — the site's own
-    display_name normalizes to exactly 'REDIRECTSITE', for a renamed tenant whose usage report
-    omitted the row. Returns (filtered_sites, excluded_by_url, excluded_by_display_name).
+    primary — the site's site-collection GUID (parsed from its composite id) matches a Site Id
+    the usage-report CSV tagged as a redirect template (redirect_site_ids, normalized via
+    _normalize_site_id); fallback — the site's own display_name normalizes to exactly
+    'REDIRECTSITE', for a renamed tenant whose usage report omitted the row.
+    Returns (filtered_sites, excluded_by_id, excluded_by_display_name).
     """
     filtered = []
-    excluded_by_url = 0
+    excluded_by_id = 0
     excluded_by_display_name = 0
     for site in raw_sites:
-        normalized_url = _normalize_site_url(getattr(site, 'web_url', None))
-        if normalized_url and normalized_url in redirect_site_urls:
-            excluded_by_url += 1
+        normalized_id = _normalize_site_id(_graph_site_collection_id(site))
+        if normalized_id and normalized_id in redirect_site_ids:
+            excluded_by_id += 1
             continue
         if _normalize_template(getattr(site, 'display_name', None)) == 'REDIRECTSITE':
             excluded_by_display_name += 1
             continue
         filtered.append(site)
-    return filtered, excluded_by_url, excluded_by_display_name
+    return filtered, excluded_by_id, excluded_by_display_name
 
 
 async def get_m365_client(graph_client):
@@ -233,30 +244,32 @@ async def get_m365_client(graph_client):
                     )
 
         # Parse the SharePoint usage CSV up front (hoisted ahead of its own processing block below)
-        # so the Sites block can derive redirect-site URLs from it before computing sites_summary.
+        # so the Sites block can derive redirect-site ids from it before computing sites_summary.
         # Both responses come from the same response_dict — no extra API call, just a reordering.
         sharepoint_response = response_dict.get('sharepoint_usage')
         sharepoint_parsed_rows = []
         if not isinstance(sharepoint_response, Exception) and sharepoint_response:
             sharepoint_parsed_rows = parse_csv_report(sharepoint_response)
 
-        # Primary redirect-site signal: Site URL values from usage-report rows whose Root Web
+        # Primary redirect-site signal: Site Id values from usage-report rows whose Root Web
         # Template is a redirect template. Graph exposes no template on the site resource itself,
-        # so this report-derived set is how sites.get() results get filtered below.
-        redirect_site_urls = {
-            _normalize_site_url(r.get('Site URL'))
+        # so this report-derived set is how sites.get() results get filtered below. Matched on
+        # Site Id, not Site URL — Microsoft blanks Site URL under the default concealed-user-info
+        # privacy setting, the same reason lemhi-api's computeNoOwnerFromReport joins on Site Id.
+        redirect_site_ids = {
+            _normalize_site_id(r.get('Site Id'))
             for r in sharepoint_parsed_rows
             if _is_redirect_site_template(r.get('Root Web Template'))
         }
-        redirect_site_urls.discard('')
+        redirect_site_ids.discard('')
 
         # Process Sites data
         sites_response = response_dict.get('sites')
         if not isinstance(sites_response, Exception) and sites_response:
             try:
                 raw_sites = sites_response.value if hasattr(sites_response, 'value') else []
-                client.sites, excluded_by_url, excluded_by_display_name = _filter_redirect_sites(
-                    raw_sites, redirect_site_urls
+                client.sites, excluded_by_id, excluded_by_display_name = _filter_redirect_sites(
+                    raw_sites, redirect_site_ids
                 )
                 client.available = True
 
@@ -267,10 +280,10 @@ async def get_m365_client(graph_client):
                     'site_names': [site.display_name for site in client.sites if hasattr(site, 'display_name')],
                     'root_site_id': client.sites[0].id if total_sites > 0 and hasattr(client.sites[0], 'id') else None
                 }
-                if excluded_by_url or excluded_by_display_name:
+                if excluded_by_id or excluded_by_display_name:
                     print(
-                        f"[sharepoint] excluded {excluded_by_url + excluded_by_display_name} redirect "
-                        f"site(s) from Graph sites listing (by_url={excluded_by_url}, "
+                        f"[sharepoint] excluded {excluded_by_id + excluded_by_display_name} redirect "
+                        f"site(s) from Graph sites listing (by_id={excluded_by_id}, "
                         f"by_display_name={excluded_by_display_name})",
                         file=sys.stderr,
                     )

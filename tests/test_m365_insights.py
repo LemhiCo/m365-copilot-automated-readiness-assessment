@@ -15,8 +15,8 @@ from Core.get_m365_client import (
 
 
 class FakeSite:
-    def __init__(self, web_url=None, display_name=None):
-        self.web_url = web_url
+    def __init__(self, id=None, display_name=None):
+        self.id = id
         self.display_name = display_name
 
 
@@ -210,7 +210,7 @@ def test_is_redirect_site_template_false_for_non_redirect_values():
 
 
 def test_sharepoint_filter_excludes_redirect_sites_both_spellings():
-    # LEM-1596: a tenant rename leaves one redirect site per renamed site. The report writes
+    # A tenant rename leaves one redirect site per renamed site. The report writes
     # the SPO template code ("REDIRECTSITE#0") on some tenants and a display name
     # ("Redirect Site") on others — both must be excluded.
     rows = [
@@ -223,39 +223,41 @@ def test_sharepoint_filter_excludes_redirect_sites_both_spellings():
     assert filtered[0]['Root Web Template'] == 'Group'
 
 
-def test_filter_redirect_sites_excludes_by_report_url():
+def test_filter_redirect_sites_excludes_by_report_site_id():
+    # Graph's composite site id is "hostname,siteCollectionId,webId" — the middle segment is
+    # what's comparable against the usage report's Site Id column.
     sites = [
-        FakeSite(web_url='https://contoso.sharepoint.com/sites/a', display_name='A'),
-        FakeSite(web_url='https://contoso.sharepoint.com/sites/old-name', display_name='Old Name'),
+        FakeSite(id='contoso.sharepoint.com,aaaaaaaa-0000-0000-0000-000000000001,bbb', display_name='A'),
+        FakeSite(id='contoso.sharepoint.com,CCCCCCCC-0000-0000-0000-000000000002,ddd', display_name='Old Name'),
     ]
-    redirect_urls = {'https://contoso.sharepoint.com/sites/old-name'}
-    filtered, by_url, by_name = _filter_redirect_sites(sites, redirect_urls)
+    redirect_ids = {'cccccccc-0000-0000-0000-000000000002'}
+    filtered, by_id, by_name = _filter_redirect_sites(sites, redirect_ids)
     assert [s.display_name for s in filtered] == ['A']
-    assert by_url == 1
+    assert by_id == 1
     assert by_name == 0
 
 
-def test_filter_redirect_sites_excludes_by_display_name_when_url_unmatched():
-    # Fallback path: usage report unavailable or missing the row, so redirect_site_urls is empty,
+def test_filter_redirect_sites_excludes_by_display_name_when_id_unmatched():
+    # Fallback path: usage report unavailable or missing the row, so redirect_site_ids is empty,
     # but the site's own display_name identifies it as a redirect site.
     sites = [
-        FakeSite(web_url='https://contoso.sharepoint.com/sites/a', display_name='A'),
-        FakeSite(web_url='https://contoso.sharepoint.com/sites/b', display_name='RedirectSite'),
+        FakeSite(id='contoso.sharepoint.com,aaaaaaaa-0000-0000-0000-000000000001,bbb', display_name='A'),
+        FakeSite(id='contoso.sharepoint.com,eeeeeeee-0000-0000-0000-000000000003,fff', display_name='RedirectSite'),
     ]
-    filtered, by_url, by_name = _filter_redirect_sites(sites, set())
+    filtered, by_id, by_name = _filter_redirect_sites(sites, set())
     assert [s.display_name for s in filtered] == ['A']
-    assert by_url == 0
+    assert by_id == 0
     assert by_name == 1
 
 
 def test_filter_redirect_sites_unchanged_when_no_redirect_sites_present():
     sites = [
-        FakeSite(web_url='https://contoso.sharepoint.com/sites/a', display_name='A'),
-        FakeSite(web_url='https://contoso.sharepoint.com/sites/b', display_name='B'),
+        FakeSite(id='contoso.sharepoint.com,aaaaaaaa-0000-0000-0000-000000000001,bbb', display_name='A'),
+        FakeSite(id='contoso.sharepoint.com,ffffffff-0000-0000-0000-000000000004,ggg', display_name='B'),
     ]
-    filtered, by_url, by_name = _filter_redirect_sites(sites, set())
+    filtered, by_id, by_name = _filter_redirect_sites(sites, set())
     assert filtered == sites
-    assert by_url == 0
+    assert by_id == 0
     assert by_name == 0
 
 
